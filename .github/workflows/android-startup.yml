@@ -12,9 +12,17 @@ jobs:
   startup:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [30, 36]
     env:
       RELEASE_TAG: ${{ inputs.release }}
       ANDROID_AVD_HOME: /tmp/emusync-avd
+      ANDROID_IMAGE: system-images;android-${{ matrix.api }};google_apis;x86_64
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Download and verify released APK
         run: |
@@ -28,11 +36,13 @@ jobs:
           sudo chmod a+rw /dev/kvm
           mkdir -p "$ANDROID_AVD_HOME"
           echo "$ANDROID_HOME/platform-tools" >>"$GITHUB_PATH"
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "emulator" "system-images;android-30;google_apis;x86_64" >/dev/null
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name emusync-test --package "system-images;android-30;google_apis;x86_64" --path "$ANDROID_AVD_HOME/emusync-test.avd"
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          adb start-server
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "emulator" "$ANDROID_IMAGE" >/dev/null
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name emusync-test --package "$ANDROID_IMAGE" --path "$ANDROID_AVD_HOME/emusync-test.avd"
           "$ANDROID_HOME/emulator/emulator" -avd emusync-test -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -feature -Vulkan -accel on -memory 2048 -cores 2 >artifacts/emulator.log 2>&1 &
           emulator_pid=$!
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 60); do
             if ! kill -0 "$emulator_pid" 2>/dev/null; then cat artifacts/emulator.log; exit 1; fi
             if [[ "$(timeout 3s adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]]; then
               adb shell input keyevent 82
@@ -63,7 +73,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: android-startup-evidence
+          name: android-startup-${{ matrix.api }}
           path: |
             artifacts/*.log
             artifacts/*.txt
