@@ -21,7 +21,7 @@ jobs:
           cd artifacts
           curl --fail --location --retry 3 -o EmuSync-Android.apk "https://github.com/ongdkd/EmuSync/releases/download/$RELEASE_TAG/EmuSync-Android.apk"
           curl --fail --location --retry 3 -o SHA256SUMS.txt "https://github.com/ongdkd/EmuSync/releases/download/$RELEASE_TAG/SHA256SUMS.txt"
-          grep -E '  (.*[/\\])?EmuSync-Android.apk$' SHA256SUMS.txt | sed 's@  .*[/\\]@  @' | sha256sum --check
+          tr -d '\r' <SHA256SUMS.txt | grep '  EmuSync-Android.apk$' | sha256sum --check
       - name: Boot isolated Android emulator
         run: |
           sudo chmod a+rw /dev/kvm
