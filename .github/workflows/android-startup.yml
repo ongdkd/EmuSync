@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 10
     env:
       RELEASE_TAG: ${{ inputs.release }}
-      ANDROID_AVD_HOME: ${{ runner.temp }}/emusync-avd
+      ANDROID_AVD_HOME: /tmp/emusync-avd
     steps:
       - name: Download and verify released APK
         run: |
