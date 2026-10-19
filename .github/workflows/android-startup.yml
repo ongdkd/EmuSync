@@ -1,0 +1,63 @@
+name: Android startup check
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Release tag containing EmuSync-Android.apk and SHA256SUMS.txt
+        default: v1.0.0-preview.1
+        required: true
+permissions:
+  contents: read
+jobs:
+  startup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RELEASE_TAG: ${{ inputs.release }}
+    steps:
+      - name: Download and verify released APK
+        run: |
+          mkdir -p artifacts
+          cd artifacts
+          curl --fail --location --retry 3 -o EmuSync-Android.apk "https://github.com/ongdkd/EmuSync/releases/download/$RELEASE_TAG/EmuSync-Android.apk"
+          curl --fail --location --retry 3 -o SHA256SUMS.txt "https://github.com/ongdkd/EmuSync/releases/download/$RELEASE_TAG/SHA256SUMS.txt"
+          grep -E '  (.*[/\\])?EmuSync-Android.apk$' SHA256SUMS.txt | sed 's@  .*[/\\]@  @' | sha256sum --check
+      - name: Boot isolated Android emulator
+        run: |
+          sudo chmod a+rw /dev/kvm
+          sdkmanager "emulator" "system-images;android-30;google_apis;x86_64" >/dev/null
+          echo no | avdmanager create avd --name emusync-test --package "system-images;android-30;google_apis;x86_64"
+          "$ANDROID_HOME/emulator/emulator" -avd emusync-test -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >artifacts/emulator.log 2>&1 &
+          for attempt in $(seq 1 180); do
+            if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]]; then
+              adb shell input keyevent 82
+              adb shell getprop ro.product.cpu.abilist
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Android emulator did not boot" >&2
+          exit 1
+      - name: Test actual APK startup and native bridge
+        run: |
+          adb install --no-streaming artifacts/EmuSync-Android.apk
+          activity=$(adb shell cmd package resolve-activity --brief app.emusync.local | tail -1 | tr -d '\r')
+          adb shell am start -W -n "$activity" | tee artifacts/launch.txt
+          sleep 20
+          adb shell pidof app.emusync.local | tee artifacts/pid.txt
+          adb shell uiautomator dump /sdcard/emusync-startup.xml
+          adb pull /sdcard/emusync-startup.xml artifacts/ui.xml
+          python3 -c "import pathlib; text=pathlib.Path('artifacts/ui.xml').read_text(); assert 'Detect PPSSPP' in text, 'Android setup did not complete its native bridge load'; assert 'Could not complete this action' not in text, 'Native bridge returned an error'"
+      - name: Capture startup evidence
+        if: always()
+        run: |
+          adb logcat -d -v threadtime >artifacts/logcat.txt 2>&1 || true
+          adb exec-out screencap -p >artifacts/screen.png || true
+          grep -E -A 35 'FATAL EXCEPTION|FATAL UNHANDLED|AndroidRuntime.*Exception|monodroid.*Exception' artifacts/logcat.txt || true
+      - name: Save diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: android-startup-evidence
+          path: artifacts/
+          retention-days: 7
