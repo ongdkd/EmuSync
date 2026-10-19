@@ -10,7 +10,7 @@
   }
   window.setState=value=>{
     state=value;
-    const games=byId('games'); games.replaceChildren();
+    const games=byId('games'); games.textContent='';
     for(const game of state.games) {
       const button=document.createElement('button'); button.type='button'; button.className='game';
       button.setAttribute('aria-pressed',String(game.id===state.selected));
@@ -38,7 +38,8 @@
     byId('host-pairing').hidden=state.platform!=='windows'; byId('phone-pairing').hidden=state.platform!=='android';
     byId('pair-status').textContent=state.paired?'PC connected. Paste a new code here if pairing changes.':'Copy a pairing code from the PC app, then paste it here.';
     byId('backup-path').textContent='Backups: '+state.backups;
-    byId('warnings').replaceChildren(...state.warnings.map(message=>{ const li=document.createElement('li'); li.textContent=message; return li; }));
+    const warnings=byId('warnings'); warnings.textContent='';
+    warnings.append(...state.warnings.map(message=>{ const li=document.createElement('li'); li.textContent=message; return li; }));
     byId('connection').textContent=state.platform==='windows'?'Keep this app open for Android · Same Wi-Fi':'Connect to the same Wi-Fi as your PC';
     window.setStatus(state.status); buttons();
   };

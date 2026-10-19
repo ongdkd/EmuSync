@@ -5,6 +5,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache
   const browser=await chromium.launch({headless:true,channel:'msedge'});
   try {
     const page=await browser.newPage(); const errors=[];
+    await page.addInitScript(()=>{ delete Element.prototype.replaceChildren; });
     page.on('pageerror',error=>errors.push(error.message));
     await page.route('https://app.test/**',route=>{
       const name=new URL(route.request().url()).pathname.slice(1)||'index.html';
@@ -27,6 +28,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache
     });
     await page.goto('https://app.test/');
     await page.locator('#setup').waitFor({state:'visible'});
+    assert.equal(await page.evaluate(()=>typeof document.body.replaceChildren),'undefined','Exercise older Android WebViews');
     assert.equal(await page.evaluate(()=>calls.some(c=>c.command==='play')),false);
     await page.locator('[data-command=games-folder]').click();
     await page.locator('[data-command=psp-folder]').click();
@@ -50,6 +52,6 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache
     await page.screenshot({path:path.resolve(__dirname,'../dist/ui-desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:900});
     await page.screenshot({path:path.resolve(__dirname,'../dist/ui-android.png'),fullPage:true});
-    console.log('PASS: real app UI setup, safe titles, selection without sync, Play dispatch, and responsive layout.');
+    console.log('PASS: legacy WebView DOM support, real app UI setup, safe titles, selection without sync, Play dispatch, and responsive layout.');
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});
