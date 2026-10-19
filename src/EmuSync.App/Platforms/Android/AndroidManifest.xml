@@ -1,0 +1,7 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+	<application android:allowBackup="false" android:usesCleartextTraffic="false" android:icon="@mipmap/emusync" android:roundIcon="@mipmap/emusync_round" android:supportsRtl="true"></application>
+	<queries><package android:name="org.ppsspp.ppsspp"/><package android:name="org.ppsspp.ppssppgold"/></queries>
+	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+	<uses-permission android:name="android.permission.INTERNET" />
+</manifest>

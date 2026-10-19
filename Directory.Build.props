@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <AndroidSdkDirectory Condition="Exists('$(MSBuildThisFileDirectory).tools/android')">$(MSBuildThisFileDirectory).tools/android</AndroidSdkDirectory>
+    <JavaSdkDirectory Condition="Exists('$(MSBuildThisFileDirectory).tools/jdk')">$(MSBuildThisFileDirectory).tools/jdk</JavaSdkDirectory>
+  </PropertyGroup>
+</Project>
