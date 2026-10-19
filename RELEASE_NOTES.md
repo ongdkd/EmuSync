@@ -16,7 +16,7 @@ Install PPSSPP separately. No games or saves are included. See the [README](http
 
 The original APK's native startup crash was reproduced on an Android 16 emulator. This update also fixes UI loading on older WebViews that lack `replaceChildren`.
 
-The regression workflow builds the tagged source for native x64 emulators and checks launch, the actual JavaScript-to-.NET setup call through saved app data, and cold relaunch on Android 11 and Android 16. The ARM64 APK's signing identity, higher version code, and packaged startup callback were verified separately. [View startup checks](https://github.com/ongdkd/EmuSync/actions/workflows/android-startup.yml).
+The tagged source passed launch, the actual JavaScript-to-.NET setup call through saved app data, and cold relaunch on Android 11 and Android 16 native x64 emulators. Both setup screenshots were inspected, and neither run logged a fatal startup error. The ARM64 APK's signing identity, higher version code, and packaged startup callback were verified separately. [View passing startup checks](https://github.com/ongdkd/EmuSync/actions/runs/39297812047).
 
 All 39 automated core checks passed. The Windows installer retains its previously verified installation/uninstall behavior.
 
