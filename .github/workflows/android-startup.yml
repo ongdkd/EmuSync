@@ -6,12 +6,16 @@ on:
         description: Release tag containing EmuSync-Android.apk and SHA256SUMS.txt
         default: v1.0.0-preview.1
         required: true
+      build_source:
+        description: Build and test the tag before publishing its release assets
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
   startup:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -20,11 +24,34 @@ jobs:
       RELEASE_TAG: ${{ inputs.release }}
       ANDROID_AVD_HOME: /tmp/emusync-avd
       ANDROID_IMAGE: system-images;android-${{ matrix.api }};google_apis;x86_64
+      DOTNET_INSTALL_DIR: /tmp/emusync-dotnet
     defaults:
       run:
         shell: bash
     steps:
+      - name: Check out candidate source
+        if: inputs.build_source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.release }}
+          persist-credentials: false
+      - name: Set up matching .NET SDK
+        if: inputs.build_source
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 10.0.300
+      - name: Build isolated Android release candidate
+        if: inputs.build_source
+        run: |
+          mkdir -p artifacts
+          dotnet workload install maui-android --skip-manifest-update
+          # Select Android for the Linux build host; application code is unchanged.
+          python3 -c "from pathlib import Path; p=Path('src/EmuSync.App/EmuSync.App.csproj'); text=p.read_text(); old='<TargetFrameworks>net10.0-android;net10.0-windows10.0.19041.0</TargetFrameworks>'; assert old in text; p.write_text(text.replace(old,'<TargetFrameworks>net10.0-android</TargetFrameworks>'))"
+          dotnet run --project tests/EmuSync.Checks
+          dotnet publish src/EmuSync.App/EmuSync.App.csproj -f net10.0-android -c Release -p:AndroidPackageFormats=apk -p:EmbedAssembliesIntoApk=true -p:RunAOTCompilation=false -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME_21_X64"
+          cp src/EmuSync.App/bin/Release/net10.0-android/publish/*-Signed.apk artifacts/EmuSync-Android.apk
       - name: Download and verify released APK
+        if: ${{ !inputs.build_source }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -57,7 +84,7 @@ jobs:
           exit 1
       - name: Test actual APK startup and native bridge
         run: |
-          adb install --no-streaming artifacts/previous.apk
+          if [[ -f artifacts/previous.apk ]]; then adb install --no-streaming artifacts/previous.apk; fi
           adb install --no-streaming -r artifacts/EmuSync-Android.apk
           activity=$(adb shell cmd package resolve-activity --brief app.emusync.local | tail -1 | tr -d '\r')
           adb shell am start -W -n "$activity" | tee artifacts/launch.txt
