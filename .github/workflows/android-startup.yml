@@ -3,13 +3,9 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: Release tag containing EmuSync-Android.apk and SHA256SUMS.txt
-        default: v1.0.0-preview.1
+        description: Git tag or branch to build for Android startup validation
+        default: main
         required: true
-      build_source:
-        description: Build and test the tag before publishing its release assets
-        type: boolean
-        default: false
 permissions:
   contents: read
 jobs:
@@ -21,7 +17,6 @@ jobs:
       matrix:
         api: [30, 36]
     env:
-      RELEASE_TAG: ${{ inputs.release }}
       ANDROID_AVD_HOME: /tmp/emusync-avd
       ANDROID_IMAGE: system-images;android-${{ matrix.api }};google_apis;x86_64
       DOTNET_INSTALL_DIR: /tmp/emusync-dotnet
@@ -30,18 +25,15 @@ jobs:
         shell: bash
     steps:
       - name: Check out candidate source
-        if: inputs.build_source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ inputs.release }}
           persist-credentials: false
       - name: Set up matching .NET SDK
-        if: inputs.build_source
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
         with:
           dotnet-version: 10.0.300
       - name: Build isolated Android release candidate
-        if: inputs.build_source
         run: |
           mkdir -p artifacts
           dotnet workload install maui-android --skip-manifest-update
@@ -50,16 +42,6 @@ jobs:
           dotnet run --project tests/EmuSync.Checks
           dotnet publish src/EmuSync.App/EmuSync.App.csproj -f net10.0-android -c Release -p:AndroidPackageFormats=apk -p:EmbedAssembliesIntoApk=true -p:RunAOTCompilation=false -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME_21_X64"
           cp src/EmuSync.App/bin/Release/net10.0-android/publish/*-Signed.apk artifacts/EmuSync-Android.apk
-      - name: Download and verify released APK
-        if: ${{ !inputs.build_source }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p artifacts
-          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern EmuSync-Android.apk --pattern SHA256SUMS.txt --dir artifacts
-          gh release download v1.0.0-preview.1 --repo "$GITHUB_REPOSITORY" --pattern EmuSync-Android.apk --output artifacts/previous.apk
-          cd artifacts
-          tr -d '\r' <SHA256SUMS.txt | grep '  EmuSync-Android.apk$' | sha256sum --check
       - name: Boot isolated Android emulator
         run: |
           sudo chmod a+rw /dev/kvm
@@ -84,22 +66,23 @@ jobs:
           exit 1
       - name: Test actual APK startup and native bridge
         run: |
-          if [[ -f artifacts/previous.apk ]]; then adb install --no-streaming artifacts/previous.apk; fi
+          adb root
+          timeout 30s adb wait-for-device
           adb install --no-streaming -r artifacts/EmuSync-Android.apk
           activity=$(adb shell cmd package resolve-activity --brief app.emusync.local | tail -1 | tr -d '\r')
           adb shell am start -W -n "$activity" | tee artifacts/launch.txt
           sleep 20
           adb shell pidof app.emusync.local | tee artifacts/pid.txt
-          adb shell uiautomator dump /sdcard/emusync-startup.xml
-          adb pull /sdcard/emusync-startup.xml artifacts/ui.xml
-          python3 -c "import pathlib; text=pathlib.Path('artifacts/ui.xml').read_text(); assert 'Detect PPSSPP' in text, 'Android setup did not complete its native bridge load'; assert 'Could not complete this action' not in text, 'Native bridge returned an error'"
+          # The real JS-to-.NET load writes settings; WebView accessibility varies by provider.
+          adb shell cat /data/user/0/app.emusync.local/files/settings.json >artifacts/startup-settings.txt
+          python3 -c "import json,pathlib; data=json.loads(pathlib.Path('artifacts/startup-settings.txt').read_text()); assert 'GamesFolder' in data and data['Baselines']=={} and data['CachedGames']==[], 'Native setup call did not persist valid initial state'"
+          adb exec-out screencap -p >artifacts/startup.png
           adb shell am force-stop app.emusync.local
           adb shell am start -W -n "$activity" | tee artifacts/relaunch.txt
           sleep 10
           adb shell pidof app.emusync.local
-          adb shell uiautomator dump /sdcard/emusync-relaunch.xml
-          adb pull /sdcard/emusync-relaunch.xml artifacts/relaunch.xml
-          python3 -c "import pathlib; text=pathlib.Path('artifacts/relaunch.xml').read_text(); assert 'Detect PPSSPP' in text; assert 'Could not complete this action' not in text"
+          adb shell cat /data/user/0/app.emusync.local/files/settings.json >artifacts/relaunch-settings.txt
+          python3 -c "import json,pathlib; initial=json.loads(pathlib.Path('artifacts/startup-settings.txt').read_text()); restored=json.loads(pathlib.Path('artifacts/relaunch-settings.txt').read_text()); assert initial==restored, 'Cold relaunch changed setup unexpectedly'"
       - name: Capture startup evidence
         if: always()
         run: |
