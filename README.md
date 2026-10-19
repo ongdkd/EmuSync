@@ -6,7 +6,7 @@ This is an independent first implementation inspired by [emu-sync/EmuSync](https
 
 ## Try the builds
 
-[Download the Windows installer and Android APK](https://github.com/ongdkd/EmuSync/releases/tag/v1.0.0-preview.1). This is a preview build; physical Android testing is still pending. No games, saves, or PPSSPP binaries are included.
+[Download the Windows installer and Android APK](https://github.com/ongdkd/EmuSync/releases/tag/v1.0.1-preview.2). Android 1.0.1 includes the startup-crash fix; install it over the original app without uninstalling or clearing data. This is a preview build; physical Android testing is still pending. No games, saves, or PPSSPP binaries are included.
 
 - **Windows:** run `dist/EmuSync-Setup-1.0.0-x64.exe`. It installs for your Windows account, adds a Start menu shortcut, and includes an uninstaller. The installer is unsigned, so Windows may display a warning. The portable build at `dist/Windows/EmuSync.App.exe` also works; keep that entire folder together.
 - **Android:** install `dist/EmuSync-Android.apk` on a 64-bit ARM device running Android 8 or newer. This is a development-signed sideload build, not a Play Store release.
@@ -85,3 +85,5 @@ The assert-based checks in `tests/EmuSync.Checks` exercise synthetic ISO parsing
 `tests/ui-check.cjs` checks the actual shipped web interface with a native-call fixture at desktop and mobile widths. It requires Playwright and Edge; set `PLAYWRIGHT_MODULE` if the package is elsewhere. `tests/native-windows-check.cjs` verifies the published native Windows bridge using a deliberately enabled local WebView debugging port; that port is not enabled by normal launches.
 
 Physical Android folder permissions and real PPSSPP launches still require device testing. The builds have not been tested with your own games or saves.
+
+The manual **Android startup check** GitHub Actions workflow installs the previous APK, upgrades to the selected release, and checks actual launch, JavaScript-to-.NET setup, and cold relaunch on Android 11 and Android 16 emulators. It accepts a release tag and saves crash logs, screenshots, and UI dumps. The original Android 1.0 build reproduces a missing `MauiApplication.n_onCreate` callback; Android 1.0.1 disables the affected native marshal optimization ([upstream issue](https://github.com/dotnet/maui/issues/35209)). Switching that build setting requires deleting the app's generated Android `bin/Release/net10.0-android` and `obj/Release/net10.0-android` directories before publishing to avoid stale Java wrappers.
