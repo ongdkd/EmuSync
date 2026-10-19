@@ -11,7 +11,7 @@ permissions:
 jobs:
   startup:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     env:
       RELEASE_TAG: ${{ inputs.release }}
     steps:
@@ -28,9 +28,11 @@ jobs:
           echo "$ANDROID_HOME/platform-tools" >>"$GITHUB_PATH"
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "emulator" "system-images;android-30;google_apis;x86_64" >/dev/null
           echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name emusync-test --package "system-images;android-30;google_apis;x86_64"
-          "$ANDROID_HOME/emulator/emulator" -avd emusync-test -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >artifacts/emulator.log 2>&1 &
-          for attempt in $(seq 1 180); do
-            if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]]; then
+          "$ANDROID_HOME/emulator/emulator" -avd emusync-test -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -feature -Vulkan -accel on -memory 2048 -cores 2 >artifacts/emulator.log 2>&1 &
+          emulator_pid=$!
+          for attempt in $(seq 1 30); do
+            if ! kill -0 "$emulator_pid" 2>/dev/null; then cat artifacts/emulator.log; exit 1; fi
+            if [[ "$(timeout 3s adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]]; then
               adb shell input keyevent 82
               adb shell getprop ro.product.cpu.abilist
               exit 0
@@ -52,13 +54,17 @@ jobs:
       - name: Capture startup evidence
         if: always()
         run: |
-          adb logcat -d -v threadtime >artifacts/logcat.txt 2>&1 || true
-          adb exec-out screencap -p >artifacts/screen.png || true
+          timeout 10s adb logcat -d -v threadtime >artifacts/logcat.txt 2>&1 || true
+          timeout 10s adb exec-out screencap -p >artifacts/screen.png || true
           grep -E -A 35 'FATAL EXCEPTION|FATAL UNHANDLED|AndroidRuntime.*Exception|monodroid.*Exception' artifacts/logcat.txt || true
       - name: Save diagnostic logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: android-startup-evidence
-          path: artifacts/
+          path: |
+            artifacts/*.log
+            artifacts/*.txt
+            artifacts/*.png
+            artifacts/*.xml
           retention-days: 7
