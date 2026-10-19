@@ -45,8 +45,8 @@ jobs:
         run: |
           mkdir -p artifacts
           dotnet workload install maui-android --skip-manifest-update
-          # Select Android for the Linux build host; application code is unchanged.
-          python3 -c "from pathlib import Path; p=Path('src/EmuSync.App/EmuSync.App.csproj'); text=p.read_text(); old='<TargetFrameworks>net10.0-android;net10.0-windows10.0.19041.0</TargetFrameworks>'; assert old in text; p.write_text(text.replace(old,'<TargetFrameworks>net10.0-android</TargetFrameworks>'))"
+          # Match the Linux emulator host; ARM APK registration is checked separately.
+          python3 -c "from pathlib import Path; p=Path('src/EmuSync.App/EmuSync.App.csproj'); text=p.read_text(); old='<TargetFrameworks>net10.0-android;net10.0-windows10.0.19041.0</TargetFrameworks>'; arm='>android-arm64</RuntimeIdentifiers>'; assert old in text and arm in text; p.write_text(text.replace(old,'<TargetFrameworks>net10.0-android</TargetFrameworks>').replace(arm,'>android-x64</RuntimeIdentifiers>'))"
           dotnet run --project tests/EmuSync.Checks
           dotnet publish src/EmuSync.App/EmuSync.App.csproj -f net10.0-android -c Release -p:AndroidPackageFormats=apk -p:EmbedAssembliesIntoApk=true -p:RunAOTCompilation=false -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME_21_X64"
           cp src/EmuSync.App/bin/Release/net10.0-android/publish/*-Signed.apk artifacts/EmuSync-Android.apk
