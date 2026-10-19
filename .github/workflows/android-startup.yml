@@ -10,10 +10,11 @@ permissions:
   contents: read
 jobs:
   startup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       RELEASE_TAG: ${{ inputs.release }}
+      ANDROID_AVD_HOME: ${{ runner.temp }}/emusync-avd
     steps:
       - name: Download and verify released APK
         run: |
@@ -25,9 +26,10 @@ jobs:
       - name: Boot isolated Android emulator
         run: |
           sudo chmod a+rw /dev/kvm
+          mkdir -p "$ANDROID_AVD_HOME"
           echo "$ANDROID_HOME/platform-tools" >>"$GITHUB_PATH"
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "emulator" "system-images;android-30;google_apis;x86_64" >/dev/null
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name emusync-test --package "system-images;android-30;google_apis;x86_64"
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name emusync-test --package "system-images;android-30;google_apis;x86_64" --path "$ANDROID_AVD_HOME/emusync-test.avd"
           "$ANDROID_HOME/emulator/emulator" -avd emusync-test -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -feature -Vulkan -accel on -memory 2048 -cores 2 >artifacts/emulator.log 2>&1 &
           emulator_pid=$!
           for attempt in $(seq 1 30); do
