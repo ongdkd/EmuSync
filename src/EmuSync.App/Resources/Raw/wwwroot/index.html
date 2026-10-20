@@ -4,37 +4,56 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-src 'none'; object-src 'none'">
+  <meta name="theme-color" content="#151c25">
   <title>EmuSync</title>
   <link rel="stylesheet" href="app.css">
   <script src="_framework/hybridwebview.js"></script>
   <script src="app.js" defer></script>
 </head>
 <body>
-  <header><div class="brand">emu<span>sync</span></div><span class="subtitle">Your PSP games</span><button id="settings" type="button">Settings</button></header>
-  <main>
-    <section id="setup" hidden aria-labelledby="setup-title">
-      <div class="setup-heading"><h1 id="setup-title">Set up once. Then just Play.</h1><button id="close-setup" type="button">Done</button></div>
-      <p>Choose your games and the same PSP folder used by PPSSPP.</p>
-      <div class="setup-row"><div><strong>Games folder</strong><small id="games-path">Not selected</small></div><button data-command="games-folder" type="button">Choose folder</button></div>
-      <div class="setup-row"><div><strong>PSP folder</strong><small id="psp-path">Contains SAVEDATA. Find it in PPSSPP → Settings → System.</small></div><button data-command="psp-folder" type="button">Choose folder</button></div>
-      <div class="setup-row"><div><strong>PPSSPP</strong><small id="emulator-path">Select the emulator installed on this device.</small></div><button data-command="emulator" id="emulator-button" type="button">Choose PPSSPP</button></div>
-      <div class="setup-row"><div><label for="sync-provider"><strong>Sync using</strong></label><small>Save check on Play. Different progress asks first.</small></div><select id="sync-provider"><option value="wifi">Same Wi-Fi</option><option value="drive">Google Drive</option></select></div>
-      <section id="drive-setup" hidden><h2>Google Drive</h2><p id="drive-status">Connect the same Google account on both devices.</p><div class="pair-actions"><button id="drive-connect" data-command="drive-connect" type="button">Connect Google Drive</button><button id="drive-disconnect" data-command="drive-disconnect" type="button" hidden>Disconnect</button><button id="drive-help" data-command="drive-setup" type="button" hidden>Setup guide</button></div><p>Saves sync on Play and after you finish. Game uploads are optional and use your Drive storage. Your PC does not need to stay on.</p></section>
-      <section id="host-pairing" hidden><h2>Connect other devices</h2><p>Keep this PC app open on the same Wi-Fi. Paste its pairing code in the Android app or on another PC. This is your main PC.</p><button data-command="copy-pair" type="button">Copy pairing code</button></section>
-      <section id="phone-pairing"><h2 id="pair-title">Connect your PC</h2><p id="pair-status">Copy a pairing code from the PC app, then paste it here.</p><label for="pair-code">Pairing code</label><textarea id="pair-code" rows="2" spellcheck="false" autocomplete="off"></textarea><div class="pair-actions"><button id="paste" type="button">Paste code</button><button id="connect" class="primary" type="button">Connect</button></div></section>
-      <details id="library-notes"><summary>Library details</summary><p>Uncompressed PSP ISO files are supported in this first version. Names and artwork come from the ISO. Save states and compressed CSO/CHD files are not included yet.</p><p id="backup-path"></p><ul id="warnings"></ul><button data-command="refresh" type="button">Refresh games</button></details>
-    </section>
-    <div id="error" role="alert" hidden></div>
+  <header class="topbar">
+    <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M10 8h12c4 0 6 5 7 13 .5 4-3 5-5 2l-3-4H11l-3 4c-2 3-5.5 2-5-2C4 13 6 8 10 8Z"/><path d="M8 13v6m-3-3h6m11-2h.1m3 4h.1"/></svg><span>emu<span class="brand-accent">sync</span></span></div>
+    <button id="library-nav" class="nav-button" type="button" aria-current="page">Library</button>
+    <div class="header-actions"><button id="connection-chip" class="connection-chip" type="button"><span class="connection-dot"></span><span id="connection-name">Same Wi-Fi</span></button><button id="settings" class="settings-button" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-.5 3-2 1.2L3.7 6l-2 3.5L4 11v2l-2.3 1.5 2 3.5 2.8-1.2 2 1.2.5 3h4l.5-3 2-1.2 2.8 1.2 2-3.5L18 13v-2l2.3-1.5-2-3.5-2.8 1.2-2-1.2L13 3Z"/><circle cx="11" cy="12" r="3"/></svg><span>Settings</span></button></div>
+  </header>
+  <main id="main-content">
+    <div id="feedback-slot"><div id="error" role="alert" hidden></div></div>
     <section class="library" aria-label="Game library">
-      <p class="label" id="choose-label">Choose a game</p>
-      <nav id="games" aria-label="Select a game"></nav>
-      <div id="empty" hidden><h2>Your games will appear here</h2><p>Choose a games folder in Settings. On Android, connect your PC to browse games you can download.</p></div>
+      <section id="library-browse">
+        <div class="library-heading"><div><p class="eyebrow">PLAYSTATION PORTABLE</p><h1>Your library<span id="game-count">0 games</span></h1></div><label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input id="search" type="search" placeholder="Find a game" aria-label="Search games" autocomplete="off"></label></div>
+        <div class="shelf-heading"><h2 id="choose-label">All games</h2><span>Save check on Play</span></div>
+        <nav id="games" aria-label="Select a game"></nav>
+        <div id="empty" class="empty-state" hidden><span class="empty-icon" aria-hidden="true">＋</span><h2>Your next game starts here.</h2><p>Choose a games folder, or connect your other device to find your PSP games.</p><button id="empty-settings" class="primary" type="button">Set up your library</button></div>
+        <div id="no-results" class="empty-state" hidden><h2>No games found</h2><p>Try another title or clear your search.</p><button id="clear-search" type="button">Clear search</button></div>
+        <p id="library-status" class="library-status" role="status" aria-live="polite">Choose a game, then press Play.</p>
+      </section>
       <section id="selected" hidden aria-label="Selected game">
-        <div class="hero" id="hero"><h1 id="game-title"></h1></div>
-        <div class="controls"><div class="action-row"><button id="play" class="primary play" type="button">▶ &nbsp; Play</button><span id="status" role="status" aria-live="polite">Save check on Play</span></div><p id="play-note">Press Play to sync your save, then open PPSSPP.</p><details><summary>Game settings</summary><label class="checkbox"><input id="sync-game" type="checkbox" checked><span id="download-label">Download this game from PC when needed</span></label><p id="game-size"></p><button id="upload-game" type="button" hidden>Upload game to Drive</button><p>Backups are kept before replacing saves. Conflicts ask which copy to use.</p></details></div>
+        <div class="detail-toolbar"><button id="back-library" class="quiet-button" type="button"><span aria-hidden="true">←</span> Library</button><span id="game-location" class="availability">On this device</span></div>
+        <div class="hero" id="hero"><img id="detail-art" alt="" hidden><div class="hero-title"><span class="console-tag">PSP</span><h1 id="game-title"></h1><p>PlayStation Portable</p></div></div>
+        <div class="controls">
+          <div class="action-row"><button id="play" class="primary play" type="button">▶ Play</button><div class="sync-summary"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18a4 4 0 0 1-1-7.9A7 7 0 0 1 18.5 8 5 5 0 0 1 19 18"/><path d="m9 17 2 2 4-5"/></svg><div><strong>Save sync</strong><span id="sync-caption">Check on Play</span></div></div><p id="game-size" class="game-size"></p></div>
+          <div class="play-feedback"><span class="status-dot" aria-hidden="true"></span><span id="status" role="status" aria-live="polite">Save check on Play</span></div><p id="play-note">Press Play to sync your save, then open PPSSPP.</p>
+          <details id="game-options"><summary>Game options</summary><div class="options-content"><label class="checkbox"><input id="sync-game" type="checkbox" checked><span id="download-label">Download this game from PC when needed</span></label><button id="upload-game" type="button" hidden>Upload game to Drive</button><p>Backups are kept before replacing saves. Different progress asks which copy to use.</p></div></details>
+        </div>
       </section>
     </section>
   </main>
   <footer id="connection">Windows PC ↔ Android · Same Wi-Fi</footer>
+  <section id="setup" hidden role="dialog" aria-modal="true" aria-labelledby="setup-title">
+    <div class="settings-panel">
+      <div class="setup-heading"><div><p class="eyebrow">MAKE YOURSELF AT HOME</p><h1 id="setup-title">Settings</h1></div><button id="close-setup" type="button">Done</button></div>
+      <p class="setup-intro">Choose your folders once. Then just press Play.</p>
+      <p id="setup-status" role="status" aria-live="polite" hidden></p>
+      <div id="setup-error-slot"></div>
+      <div class="setup-row"><div><strong>Games folder</strong><small id="games-path">Not selected</small></div><button data-command="games-folder" type="button">Choose folder</button></div>
+      <div class="setup-row"><div><strong>PSP save folder</strong><small id="psp-path">Contains SAVEDATA. Find it in PPSSPP → Settings → System.</small></div><button data-command="psp-folder" type="button">Choose folder</button></div>
+      <div class="setup-row"><div><strong>PPSSPP</strong><small id="emulator-path">Select the emulator installed on this device.</small></div><button data-command="emulator" id="emulator-button" type="button">Choose PPSSPP</button></div>
+      <div class="setup-row"><div><label for="sync-provider"><strong>Sync using</strong></label><small>Your save is checked when you press Play.</small></div><select id="sync-provider"><option value="wifi">Same Wi-Fi</option><option value="drive">Google Drive</option></select></div>
+      <section id="drive-setup" class="provider-setup" hidden><h2>Google Drive</h2><p id="drive-status">Connect the same Google account on both devices.</p><div class="pair-actions"><button id="drive-connect" data-command="drive-connect" type="button">Connect Google Drive</button><button id="drive-disconnect" data-command="drive-disconnect" type="button" hidden>Disconnect</button><button id="drive-help" data-command="drive-setup" type="button" hidden>Setup guide</button></div><p>Saves sync on Play and after you finish. Game uploads are optional. Your PC does not need to stay on.</p></section>
+      <section id="host-pairing" class="provider-setup" hidden><h2>Connect other devices</h2><p>Keep this PC app open on the same Wi-Fi. Paste its pairing code into EmuSync on your other device.</p><button data-command="copy-pair" type="button">Copy pairing code</button></section>
+      <section id="phone-pairing" class="provider-setup"><h2 id="pair-title">Connect your PC</h2><p id="pair-status">Copy a pairing code from the PC app, then paste it here.</p><label for="pair-code">Pairing code</label><textarea id="pair-code" rows="2" spellcheck="false" autocomplete="off"></textarea><div class="pair-actions"><button id="paste" type="button">Paste code</button><button id="connect" class="primary" type="button">Connect</button></div></section>
+      <details id="library-notes"><summary>Library details</summary><div class="options-content"><p>Names and artwork come from your game ISOs. Uncompressed ISO files and regular game saves are supported. Save states and CSO/CHD files are not included yet.</p><p id="backup-path"></p><ul id="warnings"></ul><button data-command="refresh" type="button">Refresh games</button></div></details>
+    </div>
+  </section>
 </body>
 </html>

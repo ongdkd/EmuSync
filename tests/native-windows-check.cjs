@@ -12,7 +12,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache
     assert(page,'Native app WebView not found');
     await page.locator('#setup').waitFor({state:'visible',timeout:20000});
     assert.equal(await page.locator('#error').isVisible(),false,await page.locator('#error').textContent());
-    assert.match(await page.locator('#status').innerText(),/Add your games folder/);
+    assert.match(await page.locator('#library-status').textContent(),/Add your games folder/);
     assert(await page.locator('#host-pairing').isVisible());
     assert.equal(await page.locator('.game').count(),0);
     await page.locator('#sync-provider').selectOption('drive');

@@ -1,29 +1,29 @@
-# EmuSync 1.1.3 — Windows mount-point fix
+# EmuSync 1.2.0 — A simpler, artwork-led library
 
-The EmuDeck support in 1.1.2 resolved SAVEDATA using final-target traversal. Windows RedirectionGuard can reject that operation with error 448: "The path cannot be traversed because it contains an untrusted mount point."
+EmuSync now opens to a cover-card library inspired by a desktop game launcher, with a dedicated game page and a layout built for Windows and Android.
 
-EmuSync now reads the junction's immediate destination without traversing it, validates that the destination is a real directory, and uses that pinned destination for save operations. Windows security policy is left enabled. Links inside saves and destinations that are themselves links remain blocked.
+- Browse artwork cards, see which games are on this device, and search by title.
+- Select a game to open its banner and a clear Play or Download & Play action. Selection and search never start save sync.
+- On phones, a large Play button stays within thumb reach. Back to Library does not trigger the on-screen keyboard.
+- Settings opens in a focused panel with folder setup, Google Drive, and Wi-Fi pairing together. Errors and connection progress stay visible in that panel.
+- Game options are tucked under the Play area. Names, icons, and banners still come from local ISOs; missing artwork uses a quiet fallback. Cloud-only artwork appears after downloading the game.
+
+The sync engine, conflict prompts, local backups, Google account switching, and EmuDeck/RedirectionGuard fixes are retained. Sync still starts on Play and after a session ends using the existing platform flow.
 
 ## Update
 
-- **Windows:** close EmuSync and run `EmuSync-Setup-1.1.3-x64.exe` over the current installation. Keep EmuDeck's PPSSPP `memstick\PSP` folder selected. No save files or EmuDeck links need moving or recreating.
-- **Android:** install `EmuSync-Android.apk` over an original-key installation. Version code is **8**, with the same package and original signing certificate. Its native folder access is unchanged. Do not uninstall or clear app data to update.
+- **Windows:** close EmuSync, then run `EmuSync-Setup-1.2.0-x64.exe` over the existing installation. Keep your current folders, PPSSPP selection, Google account, and saves.
+- **Android:** install `EmuSync-Android.apk` over an original-key installation. Version code is **9**, with the same package and signing identity. Do not uninstall or clear app data to update.
 - `SHA256SUMS.txt` contains checksums for both downloads.
-
-The Google account chooser and Reset connection fix is retained. Drive sync requires Google Drive API enabled in the OAuth project's Cloud Console and, while Google's consent app is in Testing mode, an allowed test account.
 
 The alternate-key Android APK from `v1.0-preview.1` cannot be updated in place with the original-key APK. Preserve its private data before considering removal.
 
 ## Validation and limits
 
-The exact error was reproduced before the fix using a non-admin-created Windows junction and an isolated test process with RedirectionGuard enforcement explicitly enabled and verified. The old implementation failed in `GetFinalLinkTarget` with error 448.
+Browser checks cover gallery/detail navigation, local search and empty results, safe text/artwork rendering, selection without sync, Play, Google configuration gating, reset/disconnect, optional ISO upload, settings error visibility, keyboard focus containment, and responsive layouts at 320, 390, 736, and 1024 pixels. Artwork previews use synthetic sample images and example titles only; they are not bundled as games or game artwork. The app loads actual artwork from your ISOs.
 
-After the fix, 78 standard checks and 79 guarded checks pass. The guarded run first proves that raw traversal of the test junction is denied with error 448, then verifies EmuSync can capture, apply, verify, and restore synthetic saves through the pinned real destination. Nested-link rejection, retarget protection, other-game preservation, broken-link rejection, and the existing Drive/transfer checks still pass. Fixture links are unlinked before recursive cleanup, including failed reproductions. Windows builds now run the guarded suite as well as the standard suite.
+78 standard save/transfer checks, 79 checks with Windows RedirectionGuard enforced, and the Windows authentication regression check passed. Both platform builds and Windows installer compilation passed. Android package checks verified version 1.2.0/code 9, original signing identity, and 16 KB alignment. The HTML, CSS, JavaScript, and native Google registration in both packages match their final source by SHA-256. The backend sync behavior is unchanged by this redesign.
 
-Both platform builds, Windows installer compilation, and the Windows authentication regression check passed. Android package checks verified version 1.1.3/code 8, the original signing certificate, and 16 KB alignment. Both packages retain the supplied native Google registration, verified by SHA-256.
+Physical S24 Ultra layout, this redesigned UI in a real PPSSPP session, and real Google Drive transfers still need validation. Native Windows UI and installer install/uninstall checks are not repeated against the user's running installation. Earlier Android emulator startup checks apply to the preceding 1.1.0 source, not this APK.
 
-The user reports that closing the installer/app and reopening the previous version resolves their current session. This update also handles the reproduced enforced-policy case in code. Live Google transfers, this new build on the user's actual EmuDeck installation, and physical S24 Ultra behavior still require validation. Installer install/uninstall and native Windows UI checks are not repeated against the user's running installation. Earlier Android 11/16 emulator startup checks apply to the preceding 1.1.0 source, not this APK.
-
-The Windows installer is unsigned; Android uses the original development signing key. Keep external backups of important saves. Automatic app updates and save-state sync are not included.
-
-References: [Microsoft RedirectionGuard policy](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-process-mitigation-redirection-trust-policy), [EmuDeck PPSSPP save-link setup](https://github.com/EmuDeck/emudeck-we/blob/main/functions/EmuScripts/emuDeckPPSSPP.ps1).
+The Windows installer is unsigned; Android uses the original development signing key. No games or commercial artwork are included. Automatic app updates, save-state sync, and CSO/CHD files are not included.
