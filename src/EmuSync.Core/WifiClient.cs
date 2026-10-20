@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace EmuSync.Core;
 
 public record SaveDescriptor(SaveInfo Info,string[] Paths);
-public sealed class WifiClient : IDisposable
+public sealed class WifiClient : ISyncPeer
 {
     readonly HttpClient client;
     public WifiClient(Pairing pairing)
@@ -60,39 +60,14 @@ public sealed class WifiClient : IDisposable
         using var response=await client.GetAsync($"api/games/{SafePath.GameId(game.Id)}/iso",HttpCompletionOption.ResponseHeadersRead,timeout.Token);
         Ensure(response);
         var digest=response.Headers.TryGetValues("X-Content-SHA256",out var values)?values.Single():"";
-        if (digest.Length!=64 || !digest.All(Uri.IsHexDigit) || game.Size<=0 || game.Size>8L*1024*1024*1024 || response.Content.Headers.ContentLength!=game.Size)
-            throw new IOException("The PC returned invalid game download information.");
-        Directory.CreateDirectory(cache);
-        var path=Path.Combine(cache,game.Id+"-"+Guid.NewGuid().ToString("N")+".iso");
-        try
-        {
-            await using var input=await response.Content.ReadAsStreamAsync(timeout.Token);
-            // Hash while receiving so the finished file does not have to be read back from disk.
-            using var received=IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            await using (var output=new FileStream(path,FileMode.CreateNew,FileAccess.Write,FileShare.None,1<<20,FileOptions.Asynchronous|FileOptions.SequentialScan))
-            {
-                var buffer=new byte[1<<20]; long total=0; int count,percent=-1;
-                while((count=await input.ReadAsync(buffer,timeout.Token))>0)
-                {
-                    if ((total+=count)>game.Size) throw new IOException("The game download is larger than expected.");
-                    received.AppendData(buffer,0,count);
-                    await output.WriteAsync(buffer.AsMemory(0,count),timeout.Token);
-                    var next=(int)(total*100/game.Size);
-                    if(next!=percent) { percent=next; progress($"Downloading game · {percent}%"); }
-                }
-                if(total!=game.Size) throw new IOException("The game download was interrupted. Try Play again.");
-            }
-            if(!string.Equals(Convert.ToHexString(received.GetHashAndReset()),digest,StringComparison.OrdinalIgnoreCase)) throw new IOException("The game failed verification. Try downloading again.");
-            return (path,digest);
-        }
-        catch { if(File.Exists(path)) File.Delete(path); throw; }
+        return await GameDownload.Receive(response,game,digest,cache,progress,timeout.Token);
     }
     static async Task<byte[]> Bytes(HttpResponseMessage response,int limit,CancellationToken token)
     {
         if (response.Content.Headers.ContentLength>limit) throw new IOException("The PC response is too large.");
         await using var input=await response.Content.ReadAsStreamAsync(token);
         using var output=new MemoryStream();
-        await SaveBundle.CopyLimited(input,output,limit);
+        await SaveBundle.CopyLimited(input,output,limit,token);
         return output.ToArray();
     }
     static void Ensure(HttpResponseMessage response)

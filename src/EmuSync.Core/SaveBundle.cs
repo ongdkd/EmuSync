@@ -150,13 +150,13 @@ public sealed class SaveBundle
             foreach (var path in previous.Files.Keys.Except(source.Files.Keys,StringComparer.Ordinal)) await folder.Delete(path);
         }
     }
-    public static async Task CopyLimited(Stream input,Stream output,long limit)
+    public static async Task CopyLimited(Stream input,Stream output,long limit,CancellationToken token=default)
     {
         var buffer = new byte[65536]; long total=0; int count;
-        while ((count=await input.ReadAsync(buffer))>0)
+        while ((count=await input.ReadAsync(buffer,token))>0)
         {
             if ((total+=count)>limit) throw new InvalidDataException("Transfer exceeds the safety limit.");
-            await output.WriteAsync(buffer.AsMemory(0,count));
+            await output.WriteAsync(buffer.AsMemory(0,count),token);
         }
     }
 }

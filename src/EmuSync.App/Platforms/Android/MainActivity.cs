@@ -12,6 +12,7 @@ public class MainActivity : MauiAppCompatActivity
     protected override void OnActivityResult(int requestCode,Result resultCode,Intent? data)
     {
         base.OnActivityResult(requestCode,resultCode,data);
+        if(requestCode==732) { GoogleDriveAuth.Complete(resultCode,data); return; }
         if(requestCode!=731 || FolderRequest is null) return;
         var request=FolderRequest; FolderRequest=null;
         if(resultCode!=Result.Ok || data?.Data is null) { request.TrySetResult(null); return; }

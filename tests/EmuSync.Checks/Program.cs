@@ -104,6 +104,7 @@ try
     var firstRecord=iso[21*2048];
     Record(21*2048+firstRecord,23,(uint)icon.Length,"ICON0.PNG;1",false); icon.CopyTo(iso,23*2048);
     var illustrated=await IsoReader.Read(new MemoryStream(iso),"test.iso");
+    checks+=await DriveChecks.Run(iso,root);
     Check(illustrated.Icon=="data:image/png;base64,"+Convert.ToBase64String(icon),"ISO thumbnail extracted from ICON0.PNG");
     BinaryPrimitives.WriteUInt32BigEndian(iso.AsSpan(23*2048+16),65535);
     Check((await IsoReader.Read(new MemoryStream(iso),"test.iso")).Icon is null,"Oversized thumbnail rejected");
@@ -117,7 +118,7 @@ finally
         throw new IOException("Refusing cleanup outside the test directory.");
     Directory.Delete(resolved,true);
 }
-Console.WriteLine($"PASS: {checks} checks (sync decisions, backups, ISO metadata, TLS pinning, authentication, stale-update protection and game transfer).");
+Console.WriteLine($"PASS: {checks} checks (sync decisions, backups, ISO metadata, TLS pinning, authentication, stale-update protection, Drive history/conflicts and game transfer).");
 
 sealed class FailingFolder(IGameFolder inner) : IGameFolder
 {

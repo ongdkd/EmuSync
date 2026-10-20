@@ -2,7 +2,7 @@
 
 A small Windows + Android launcher for PPSSPP. Choose a game and press **Play**: check and sync the save, ask if progress conflicts, then open PPSSPP.
 
-This is an independent first implementation inspired by [emu-sync/EmuSync](https://github.com/emu-sync/EmuSync). It uses your PC as the shared library on your local Wi-Fi; no cloud account or public server is needed.
+This is an independent implementation inspired by [emu-sync/EmuSync](https://github.com/emu-sync/EmuSync). The published 1.0.2 build uses your PC as the shared library on local Wi-Fi. The 1.1.0 source adds optional Google Drive sync; it needs Google app registration before sign-in is available.
 
 ## Try the builds
 
@@ -16,6 +16,8 @@ PPSSPP must be installed separately on each device.
 Windows uninstall removes the installed app only. Your selected games/save folders and private app settings/backups are preserved. Close EmuSync and finish any game session before installing an update or uninstalling.
 
 ## One-time setup
+
+For the Google Drive preview, complete the [Google registration and build setup](docs/google-drive-setup.md) first. It supports save sync plus optional ISO uploads/downloads, with no PC required to stay on. Live Google sign-in and real-device cloud transfers have not yet been tested. The Wi-Fi setup below continues to work.
 
 On **Windows**, open Settings and choose:
 
@@ -58,7 +60,7 @@ If the PC's address changes, copy a fresh pairing code. To revoke existing pairi
 
 ## Current limits
 
-- Uncompressed `.iso` games and regular `SAVEDATA` only. CSO/CHD, save states, cloud providers, and internet access are not implemented.
+- Uncompressed `.iso` games and regular `SAVEDATA` only. CSO/CHD and save states are not implemented. Google Drive requires the preview setup above; other cloud providers are not implemented.
 - Game discovery scans up to four subfolders deep and 1,000 game IDs; duplicate IDs use the first copy found.
 - Saves are limited to 128 MB per game and 10,000 files. Symbolic links and paths that cannot transfer safely to Windows are rejected.
 - Android must use local folder storage that supports seeking. Some cloud document providers cannot expose ISO files this way.

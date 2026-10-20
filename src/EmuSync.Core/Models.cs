@@ -2,6 +2,14 @@ namespace EmuSync.Core;
 
 public record Game(string Id, string Title, string FileName, long Size, string? Icon, string? Background);
 public record FolderEntry(string Name, bool IsDirectory, long Size);
+public interface ISyncPeer : IDisposable
+{
+    Task<List<Game>> Games();
+    Task<(string Path,string Hash)> DownloadGame(Game game,string cache,Action<string> progress);
+    Task<SaveDescriptor> Describe(string id);
+    Task<SaveBundle> DownloadSave(string id,string hash);
+    Task UploadSave(string id,SaveBundle bundle,string? expected);
+}
 public interface IGameFolder
 {
     Task<IReadOnlyList<FolderEntry>> List(string path = "");

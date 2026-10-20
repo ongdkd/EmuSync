@@ -12,6 +12,8 @@ public sealed class LibraryPage : ContentPage
     readonly List<string> warnings=[];
     Settings settings;
     bool loaded;
+    bool driveConfigured;
+    bool Drive=>settings.SyncProvider=="drive";
     string? session;
 #if ANDROID
     bool leftForGame;
@@ -37,7 +39,7 @@ public sealed class LibraryPage : ContentPage
         await gate.WaitAsync();
         try
         {
-            if(session is not null && command is "games-folder" or "psp-folder" or "emulator" or "pair" or "refresh")
+            if(session is not null && command is "games-folder" or "psp-folder" or "emulator" or "pair" or "refresh" or "sync-provider" or "drive-connect" or "drive-disconnect" or "upload-game")
                 throw new IOException("Finish your PPSSPP session before changing setup.");
             if(command=="psp-folder" && SaveBundle.RecoveryNeeded(Path.Combine(FileSystem.AppDataDirectory,"backups")))
                 throw new IOException("Restore the interrupted sync using Refresh games before changing your PSP folder.");
@@ -45,6 +47,37 @@ public sealed class LibraryPage : ContentPage
             {
                 case "load": if(!loaded) { await Load(); loaded=true; } break;
                 case "refresh": await Load(); break;
+                case "sync-provider":
+                    if(value is not ("wifi" or "drive")) throw new IOException("Choose Wi-Fi or Google Drive.");
+                    settings.SyncProvider=value; await RestartHost(); await Load(); break;
+                case "drive-setup": await Launcher.Default.OpenAsync("https://github.com/ongdkd/EmuSync/blob/main/docs/google-drive-setup.md"); break;
+                case "drive-connect":
+                    await Status("Connecting Google Drive…");
+                    using(var drive=NewDrive(await GoogleDriveAuth.Token(true)))
+                    {
+                        var account=await drive.Account();
+                        if(settings.DriveAccountId!=account.Id) settings.CachedDriveGames.Clear();
+                        settings.DriveAccountId=account.Id; settings.DriveEmail=account.Email; settings.SyncProvider="drive";
+                    }
+                    await RestartHost(); await Load(); status="Google Drive connected. Saves sync when you press Play."; break;
+                case "drive-disconnect":
+                    if(!await DisplayAlertAsync("Disconnect Google Drive?","Drive files will stay. Revoking EmuSync's Google access may require signing in again on your other devices too.","Disconnect","Cancel")) break;
+                    await GoogleDriveAuth.Disconnect(settings.DriveEmail);
+                    settings.DriveAccountId=null; settings.DriveEmail=null; settings.SyncProvider="wifi";
+                    settings.CachedDriveGames.Clear();
+                    await RestartHost(); await Load(); break;
+                case "upload-game":
+                    if(!Drive) throw new IOException("Choose Google Drive in Settings first.");
+                    if(DeviceFiles.EmulatorRunning()) throw new IOException("Close PPSSPP before uploading its ISO.");
+                    var uploadId=SafePath.GameId(value);
+                    var uploadGame=local.GetValueOrDefault(uploadId)??throw new IOException("Download this game to this device before uploading it.");
+                    using(var drive=(DriveClient)await Peer())
+                    {
+                        await using var input=await DeviceFiles.OpenFolder(settings.GamesFolder!).Read(uploadGame.FileName);
+                        await drive.UploadGame(uploadGame,input,message=>_ = MainThread.InvokeOnMainThreadAsync(()=>Status(message)));
+                        settings.CachedDriveGames=await drive.Games();
+                    }
+                    status="Game available on Google Drive."; break;
                 case "games-folder":
                     var games=await DeviceFiles.PickFolder();
                     if(games is not null) { settings.GamesFolder=games; await RestartHost(); await Load(); }
@@ -94,18 +127,20 @@ public sealed class LibraryPage : ContentPage
     record GameOption(string Id,bool Enabled);
     object State()
     {
-        var games=local.Values.Concat(settings.CachedGames).DistinctBy(g=>g.Id).OrderBy(g=>g.Title).ToArray();
+        var games=local.Values.Concat(Drive?settings.CachedDriveGames:settings.CachedGames).DistinctBy(g=>g.Id).OrderBy(g=>g.Title).ToArray();
         if(!games.Any(g=>g.Id==settings.Selected)) settings.Selected=games.FirstOrDefault()?.Id;
         return new {
             platform=DeviceInfo.Platform==DevicePlatform.WinUI?"windows":"android",games,settings.Selected,
             installed=local.Keys.ToArray(),settings.SyncGames,status,warnings=warnings.ToArray(),
             gamesFolder=settings.GamesFolder,pspFolder=settings.PspFolder,emulator=settings.Emulator,
-            paired=settings.PairCode is not null,session,backups=Path.Combine(FileSystem.AppDataDirectory,"backups")
+            paired=settings.PairCode is not null,session,backups=Path.Combine(FileSystem.AppDataDirectory,"backups"),
+            syncProvider=settings.SyncProvider,driveConfigured,driveConnected=settings.DriveAccountId is not null,driveEmail=settings.DriveEmail
         };
     }
     async Task Load()
     {
         warnings.Clear();
+        driveConfigured=(await DriveOAuthSettings.Load()).Configured;
         var backups=Path.Combine(FileSystem.AppDataDirectory,"backups");
         if(settings.PspFolder is not null && SaveBundle.RecoveryNeeded(backups))
         {
@@ -120,14 +155,20 @@ public sealed class LibraryPage : ContentPage
             var folder=DeviceFiles.OpenFolder(settings.GamesFolder);
             await Task.Run(()=>Scan(folder,"",0));
         }
-        if(settings.PairCode is not null)
+        if(Drive && settings.DriveAccountId is not null)
+        {
+            try { using var peer=await Peer(); settings.CachedDriveGames=await peer.Games(); }
+            catch(Exception e) when(e is IOException or HttpRequestException or TaskCanceledException)
+            { warnings.Add("Drive library unavailable. Showing your saved library. "+e.Message); }
+        }
+        else if(!Drive && settings.PairCode is not null)
         {
             try { using var peer=new WifiClient(Pairing.Parse(settings.PairCode)); settings.CachedGames=await peer.Games(); }
             catch(Exception e) when(e is IOException or HttpRequestException or TaskCanceledException)
             { warnings.Add("Main PC unavailable. Showing your saved library; Play will check the connection again."); }
         }
         await StartHost();
-        status=local.Count+settings.CachedGames.Count==0?"Add your games folder in Settings to get started.":"Choose a game, then press Play.";
+        status=local.Count+(Drive?settings.CachedDriveGames.Count:settings.CachedGames.Count)==0?"Add your games folder in Settings to get started.":"Choose a game, then press Play.";
     }
     async Task Scan(IGameFolder folder,string path,int depth)
     {
@@ -154,15 +195,14 @@ public sealed class LibraryPage : ContentPage
         if(session is not null || DeviceFiles.EmulatorRunning()) throw new IOException("Close the running PPSSPP game before starting another session.");
         if(settings.GamesFolder is null || settings.PspFolder is null || settings.Emulator is null)
             throw new IOException("Open Settings and select your games folder, PSP folder and PPSSPP first.");
-        var game=local.GetValueOrDefault(id)??settings.CachedGames.SingleOrDefault(g=>g.Id==id)??throw new IOException("Select a game from your library.");
+        var game=local.GetValueOrDefault(id)??(Drive?settings.CachedDriveGames:settings.CachedGames).SingleOrDefault(g=>g.Id==id)??throw new IOException("Select a game from your library.");
         var saves=DeviceFiles.OpenFolder(settings.PspFolder);
 #if ANDROID
         ((SafFolder)saves).CheckAccess();
 #endif
         var offline=false;
         await Status("Checking your save…");
-        // Android always syncs with a PC. A Windows PC does too once it has been paired with another PC.
-        var client=settings.PairCode is not null;
+        var client=Drive || settings.PairCode is not null;
 #if ANDROID
         client=true;
 #endif
@@ -171,14 +211,13 @@ public sealed class LibraryPage : ContentPage
         try
         {
 #if ANDROID
-            if(!Connectivity.Current.ConnectionProfiles.Any(p=>p is ConnectionProfile.WiFi or ConnectionProfile.Ethernet))
+            if(!Drive && !Connectivity.Current.ConnectionProfiles.Any(p=>p is ConnectionProfile.WiFi or ConnectionProfile.Ethernet))
                 throw new HttpRequestException("Connect to the same Wi-Fi as your PC.");
 #endif
-            if(settings.PairCode is null) throw new IOException("Connect to your PC in Settings first.");
-            using var peer=new WifiClient(Pairing.Parse(settings.PairCode));
+            using var peer=await Peer();
             if(!local.ContainsKey(id))
             {
-                if(!settings.SyncGames.GetValueOrDefault(id,true) && !await DisplayAlertAsync("Download game?",$"{game.Title} is not on this device. Download it from your PC?","Download","Cancel")) return;
+                if(!settings.SyncGames.GetValueOrDefault(id,true) && !await DisplayAlertAsync("Download game?",$"{game.Title} is not on this device. Download it from {(Drive?"Google Drive":"your PC")}?","Download","Cancel")) return;
                 await Status("Preparing game download…");
                 var downloaded=await peer.DownloadGame(game,FileSystem.CacheDirectory,message=>_ = MainThread.InvokeOnMainThreadAsync(()=>Status(message)));
                 try
@@ -217,8 +256,8 @@ public sealed class LibraryPage : ContentPage
 #endif
         catch(Exception e) when(e is HttpRequestException or TaskCanceledException)
         {
-            if(!local.ContainsKey(id)) throw new IOException("The main PC is unavailable and this game is not downloaded. Keep the PC app open on the same Wi-Fi and try again.",e);
-            if(!await DisplayAlertAsync("Play offline?","The main PC could not be reached. Your latest save cannot be checked. You can use your local save and sync it later.","Play offline","Cancel")) return;
+            if(!local.ContainsKey(id)) throw new IOException($"{(Drive?"Google Drive":"The main PC")} is unavailable and this game is not downloaded. Check the connection and try again.",e);
+            if(!await DisplayAlertAsync("Play offline?",$"{(Drive?"Google Drive":"The main PC")} could not be reached. Your latest save cannot be checked. You can use your local save and sync it later.","Play offline","Cancel")) return;
             offline=true;
         }
         }
@@ -249,8 +288,8 @@ public sealed class LibraryPage : ContentPage
         {
             try
             {
-                using var peer=new WifiClient(Pairing.Parse(settings.PairCode!));
-                if(await Sync(id,peer,saves)) await Status("Session finished · Your progress is synced to the main PC.");
+                using var peer=await Peer();
+                if(await Sync(id,peer,saves)) await Status($"Session finished · Your progress is synced to {(Drive?"Google Drive":"the main PC")}.");
             }
             catch(Exception e) when(e is IOException or HttpRequestException or TaskCanceledException)
             { await Status("Progress is still on this PC. "+e.Message); }
@@ -269,7 +308,26 @@ public sealed class LibraryPage : ContentPage
         File.Move(Path.Combine(root,partial),Path.Combine(root,target),false);
 #endif
     }
-    async Task<bool> Sync(string id,WifiClient peer,IGameFolder saves)
+    DriveClient NewDrive(string token)=>new(token,DeviceInfo.Current.Name,async versions=>
+    {
+        var labels=versions.Select((v,i)=>$"{i+1}. {v.Device} · {v.Created.LocalDateTime:g}").ToArray();
+        var choice=await DisplayActionSheetAsync("Different devices uploaded different Drive saves. Choose the cloud copy to compare with this device. All copies are kept.","Cancel",null,labels);
+        var index=Array.IndexOf(labels,choice);
+        return index<0?null:versions[index].Id;
+    });
+    async Task<ISyncPeer> Peer()
+    {
+        if(!Drive) return new WifiClient(Pairing.Parse(settings.PairCode??throw new IOException("Connect to your PC in Settings first.")));
+        if(settings.DriveAccountId is null) throw new IOException("Connect Google Drive in Settings first.");
+        var drive=NewDrive(await GoogleDriveAuth.Token(email:settings.DriveEmail));
+        try
+        {
+            if((await drive.Account()).Id!=settings.DriveAccountId) throw new IOException("The Google account changed. Reconnect in Settings before syncing. No save was changed.");
+            return drive;
+        }
+        catch { drive.Dispose(); throw; }
+    }
+    async Task<bool> Sync(string id,ISyncPeer peer,IGameFolder saves)
     {
         // Reading the device save and asking the PC about its copy are independent, so do both at once.
         var capture=Task.Run(()=>SaveBundle.Capture(saves,id));
@@ -277,22 +335,25 @@ public sealed class LibraryPage : ContentPage
         await Task.WhenAll(capture,describe);
         var localSave=await capture;
         var remote=await describe;
-        var baseline=settings.Baselines.GetValueOrDefault(id);
+        var baselineKey=Drive?$"drive:{settings.DriveAccountId}:{id}":id;
+        var baseline=settings.Baselines.GetValueOrDefault(baselineKey);
+        var branches=peer is DriveClient {HasBranches:true};
         var missing=baseline?.Paths.Except(localSave.Files.Keys).Any()==true;
-        var action=SyncPlan.Decide(localSave.Info.Hash,remote.Info.Hash,baseline?.Hash,localSave.Info.Suspicious||missing||remote.Info.Suspicious);
+        var action=SyncPlan.Decide(localSave.Info.Hash,remote.Info.Hash,baseline?.Hash,localSave.Info.Suspicious||missing||remote.Info.Suspicious||branches);
+        var remoteChoice=Drive?"Use Google Drive save":"Use PC save";
         if(action is SyncAction.Conflict or SyncAction.Suspicious)
         {
             var choices=new List<string>();
             if(localSave.Info.Hash is not null && !localSave.Info.Suspicious && !missing) choices.Add("Use this device's save");
-            if(remote.Info.Hash is not null && !remote.Info.Suspicious) choices.Add("Use PC save");
+            if(remote.Info.Hash is not null && !remote.Info.Suspicious) choices.Add(remoteChoice);
             if(choices.Count==0) throw new IOException("These saves look incomplete. Sync is paused. Check your PSP folder and restore a backup before trying again.");
             var choice=await DisplayActionSheetAsync(action==SyncAction.Conflict?"Both devices have different progress. Which save should be used? Both copies will be backed up.":"A save is missing or looks incomplete. Choose a safe copy to continue. Backups will be kept.","Cancel",null,choices.ToArray());
             if(choice=="Cancel" || choice is null) { await Status("Sync paused · Nothing was replaced."); return false; }
-            action=choice=="Use PC save"?SyncAction.Download:SyncAction.Upload;
+            action=choice==remoteChoice?SyncAction.Download:SyncAction.Upload;
         }
         if(action==SyncAction.Upload)
         {
-            await Status("Sending your save to PC…");
+            await Status(Drive?"Sending your save to Google Drive…":"Sending your save to PC…");
             await Backup(id,localSave);
             await peer.UploadSave(id,localSave,remote.Info.Hash);
         }
@@ -307,7 +368,8 @@ public sealed class LibraryPage : ContentPage
                 localSave=bundle;
             }
         }
-        settings.Baselines[id]=new(localSave.Info.Hash,localSave.Files.Keys.ToArray());
+        if(branches && action!=SyncAction.Upload) await peer.UploadSave(id,localSave,remote.Info.Hash);
+        settings.Baselines[baselineKey]=new(localSave.Info.Hash,localSave.Files.Keys.ToArray());
         await settings.Save();
         return true;
     }
@@ -335,11 +397,11 @@ public sealed class LibraryPage : ContentPage
         try
         {
             leftForGame=false;
-            if(!await DisplayAlertAsync("Finished playing?","Exit the game in PPSSPP before syncing your progress back to PC.","Game is closed · Sync","Still playing")) return;
+            if(!await DisplayAlertAsync("Finished playing?",$"Exit the game in PPSSPP before syncing your progress to {(Drive?"Google Drive":"PC")}.","Game is closed · Sync","Still playing")) return;
             var id=session; session=null;
-            if(settings.PairCode is null || settings.PspFolder is null) return;
-            using var peer=new WifiClient(Pairing.Parse(settings.PairCode));
-            if(await Sync(id,peer,DeviceFiles.OpenFolder(settings.PspFolder))) await Status("Your progress is synced to PC.");
+            if(settings.PspFolder is null) return;
+            using var peer=await Peer();
+            if(await Sync(id,peer,DeviceFiles.OpenFolder(settings.PspFolder))) await Status($"Your progress is synced to {(Drive?"Google Drive":"PC")}.");
         }
         catch(Exception error)
         { await Status("Progress is still on this device. "+error.Message); await DisplayAlertAsync("Progress not synced",status,"OK"); }
@@ -355,6 +417,7 @@ public sealed class LibraryPage : ContentPage
     async Task StartHost()
     {
 #if WINDOWS
+        if(Drive) return;
         if(settings.PspFolder is null || settings.GamesFolder is null) return;
         host??=new WifiHost();
         await host.Start(DeviceFiles.OpenFolder(settings.PspFolder),DeviceFiles.OpenFolder(settings.GamesFolder),()=>local.Values.ToArray(),()=>session is not null || DeviceFiles.EmulatorRunning(),FileSystem.AppDataDirectory);

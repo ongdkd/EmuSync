@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot
-$installer = Join-Path $projectRoot 'dist\EmuSync-Setup-1.0.0-x64.exe'
+$version = ([xml](Get-Content (Join-Path $projectRoot 'src\EmuSync.App\EmuSync.App.csproj'))).SelectSingleNode('//ApplicationDisplayVersion').InnerText
+$installer = Join-Path $projectRoot "dist\EmuSync-Setup-$version-x64.exe"
 $source = Join-Path $projectRoot 'dist\Windows'
 $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{B57009C6-6921-420A-A67A-B6C9844129CA}_is1'
 $shortcutFolder = Join-Path ([Environment]::GetFolderPath('Programs')) 'EmuSync'

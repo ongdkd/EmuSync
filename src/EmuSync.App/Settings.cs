@@ -11,9 +11,13 @@ public sealed class Settings
     public string? Emulator { get; set; }
     public string? PairCode { get; set; }
     public string? Selected { get; set; }
+    public string SyncProvider { get; set; }="wifi";
+    public string? DriveAccountId { get; set; }
+    public string? DriveEmail { get; set; }
     public Dictionary<string,Baseline> Baselines { get; set; }=[];
     public Dictionary<string,bool> SyncGames { get; set; }=[];
     public List<Game> CachedGames { get; set; }=[];
+    public List<Game> CachedDriveGames { get; set; }=[];
     static string PathName=>Path.Combine(FileSystem.AppDataDirectory,"settings.json");
     public static Settings Load()
     {
