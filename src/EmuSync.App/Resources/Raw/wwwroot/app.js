@@ -45,7 +45,8 @@
     byId('host-pairing').hidden=drive || state.platform!=='windows';
     byId('drive-status').textContent=!state.driveConfigured?'Google Drive needs one-time app setup before sign-in is available.':state.driveConnected?'Connected as '+state.driveEmail:'Connect the same Google account on both devices.';
     byId('drive-help').hidden=!!state.driveConfigured;
-    byId('drive-disconnect').hidden=!state.driveConnected;
+    byId('drive-disconnect').hidden=!state.driveConfigured;
+    byId('drive-disconnect').textContent=state.driveConnected?'Disconnect':'Reset connection';
     byId('drive-connect').textContent=state.driveConnected?'Reconnect Google Drive':'Connect Google Drive';
     byId('play-note').textContent=drive && (!state.driveConnected || !state.driveConfigured)?'Connect Google Drive in Settings before playing with cloud sync.':'Press Play to sync your save, then open PPSSPP.';
     byId('upload-game').hidden=!drive || !selected || !state.installed.includes(selected.id);

@@ -63,7 +63,7 @@ public sealed class LibraryPage : ContentPage
                 case "drive-disconnect":
                     if(!await DisplayAlertAsync("Disconnect Google Drive?","Drive files will stay. Revoking EmuSync's Google access may require signing in again on your other devices too.","Disconnect","Cancel")) break;
                     await GoogleDriveAuth.Disconnect(settings.DriveEmail);
-                    settings.DriveAccountId=null; settings.DriveEmail=null; settings.SyncProvider="wifi";
+                    settings.DriveAccountId=null; settings.DriveEmail=null;
                     settings.CachedDriveGames.Clear();
                     await RestartHost(); await Load(); break;
                 case "upload-game":

@@ -21,6 +21,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache
           if(command==='play') state.status='Sync completed before launch';
           if(command==='sync-provider') state.syncProvider=value;
           if(command==='drive-connect') { state.driveConnected=true; state.driveEmail='test@example.invalid'; }
+          if(command==='drive-disconnect') { state.driveConnected=false; state.driveEmail=null; }
           if(command==='upload-game') state.status='Game available on Google Drive';
           if(command==='sync-game') { const option=JSON.parse(value); state.syncGames[option.id]=option.enabled; }
           return JSON.stringify({state});
@@ -49,9 +50,14 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache
     await page.locator('#drive-setup').waitFor({state:'visible'});
     assert(await page.locator('#phone-pairing').isHidden());
     assert(await page.locator('#host-pairing').isHidden());
+    assert(await page.locator('#drive-disconnect').isVisible(),'Failed/unverified sign-in must still allow resetting cached credentials');
+    assert.equal(await page.locator('#drive-disconnect').innerText(),'Reset connection');
+    await page.locator('#drive-disconnect').click();
+    assert.equal(await page.evaluate(()=>calls.filter(c=>c.command==='drive-disconnect').length),1);
     await page.locator('#drive-connect').click();
     await page.waitForFunction(()=>document.getElementById('drive-status').textContent.includes('test@example.invalid'));
     assert.equal(await page.evaluate(()=>calls.filter(c=>c.command==='play').length),1,'Connecting Drive must not sync saves');
+    assert.equal(await page.locator('#drive-disconnect').innerText(),'Disconnect');
     await page.evaluate(()=>window.setState({...window.fixtureState,driveConfigured:false}));
     assert(await page.locator('#drive-connect').isDisabled());
     assert(await page.locator('#drive-help').isVisible());

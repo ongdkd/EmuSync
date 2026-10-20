@@ -44,6 +44,8 @@ The PC can be off when Android syncs through Drive. You need internet, enough Dr
 
 ## Save protection and limits
 
+If sign-in succeeds but connecting Drive fails, choose **Reset connection** in Settings to clear the saved sign-in, then connect again. On Windows, Connect/Reconnect opens Google's account chooser each time. Resetting or disconnecting keeps your local saves and Drive files; revoking access may require reconnecting other devices. An already revoked Windows token can also be reset.
+
 - Files are stored in an **EmuSync** folder in My Drive. The app only requests access to files it creates/uses, not your entire Drive.
 - Saves are immutable ZIP snapshots with parent links. Simultaneous different uploads preserve both versions and ask which cloud copy to use; local-vs-cloud conflicts ask before replacement. This avoids relying on clocks or silently overwriting a concurrent save.
 - Local backups and recovery records are retained. Drive snapshots are not automatically deleted; they consume quota. The first version stops for attention after 1,000 revisions per game.

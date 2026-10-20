@@ -22,17 +22,19 @@ static class GoogleDriveAuth
         public Task DeleteAsync<T>(string key) { SecureStorage.Default.Remove(Key); return Task.CompletedTask; }
         public Task ClearAsync()=>DeleteAsync<TokenResponse>(User);
     }
-    public static async Task<string> Token(bool interactive=false,string? email=null)
+    public static async Task<string> Token(bool interactive=false,string? email=null,ICodeReceiver? codeReceiver=null)
     {
         var config=await DriveOAuthSettings.Require();
         var store=new TokenStore();
-        var initializer=new GoogleAuthorizationCodeFlow.Initializer {ClientSecrets=new ClientSecrets {ClientId=config.DesktopClientId,ClientSecret=config.DesktopClientSecret},DataStore=store,Scopes=[DriveClient.Scope]};
+        var initializer=new GoogleAuthorizationCodeFlow.Initializer {ClientSecrets=new ClientSecrets {ClientId=config.DesktopClientId,ClientSecret=config.DesktopClientSecret},DataStore=store,Scopes=[DriveClient.Scope],Prompt=interactive?"select_account consent":null};
         using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(interactive?5:1));
         try
         {
             if(interactive)
             {
-                var credential=await GoogleWebAuthorizationBroker.AuthorizeAsync(initializer,[DriveClient.Scope],User,true,timeout.Token,store);
+                // Drive account verification can fail after OAuth has already cached a token.
+                await store.ClearAsync();
+                var credential=await GoogleWebAuthorizationBroker.AuthorizeAsync(initializer,[DriveClient.Scope],User,true,timeout.Token,store,codeReceiver);
                 using(credential.Flow) return await credential.GetAccessTokenForRequestAsync(cancellationToken:timeout.Token);
             }
             var saved=await store.GetAsync<TokenResponse>(User)??throw new IOException("Connect Google Drive in Settings first.");
@@ -50,7 +52,7 @@ static class GoogleDriveAuth
             using var client=new HttpClient(new SocketsHttpHandler {AllowAutoRedirect=false}) {Timeout=TimeSpan.FromSeconds(30)};
             using var form=new FormUrlEncodedContent(new Dictionary<string,string> {{"token",saved.RefreshToken??saved.AccessToken}});
             using var response=await client.PostAsync("https://oauth2.googleapis.com/revoke",form);
-            if(!response.IsSuccessStatusCode) throw new IOException("Google could not revoke access. Reconnect or remove EmuSync access in your Google account settings.");
+            if(!response.IsSuccessStatusCode && response.StatusCode!=System.Net.HttpStatusCode.BadRequest) throw new IOException("Google could not revoke access. Reconnect or remove EmuSync access in your Google account settings.");
         }
         await store.ClearAsync();
     }
