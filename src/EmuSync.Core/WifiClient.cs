@@ -67,20 +67,22 @@ public sealed class WifiClient : IDisposable
         try
         {
             await using var input=await response.Content.ReadAsStreamAsync(timeout.Token);
-            await using (var output=File.Create(path))
+            // Hash while receiving so the finished file does not have to be read back from disk.
+            using var received=IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            await using (var output=new FileStream(path,FileMode.CreateNew,FileAccess.Write,FileShare.None,1<<20,FileOptions.Asynchronous|FileOptions.SequentialScan))
             {
-                var buffer=new byte[128*1024]; long total=0; int count,percent=-1;
+                var buffer=new byte[1<<20]; long total=0; int count,percent=-1;
                 while((count=await input.ReadAsync(buffer,timeout.Token))>0)
                 {
                     if ((total+=count)>game.Size) throw new IOException("The game download is larger than expected.");
+                    received.AppendData(buffer,0,count);
                     await output.WriteAsync(buffer.AsMemory(0,count),timeout.Token);
                     var next=(int)(total*100/game.Size);
                     if(next!=percent) { percent=next; progress($"Downloading game · {percent}%"); }
                 }
                 if(total!=game.Size) throw new IOException("The game download was interrupted. Try Play again.");
             }
-            await using var verify=File.OpenRead(path);
-            if(Convert.ToHexString(await SHA256.HashDataAsync(verify,timeout.Token))!=digest) throw new IOException("The game failed verification. Try downloading again.");
+            if(!string.Equals(Convert.ToHexString(received.GetHashAndReset()),digest,StringComparison.OrdinalIgnoreCase)) throw new IOException("The game failed verification. Try downloading again.");
             return (path,digest);
         }
         catch { if(File.Exists(path)) File.Delete(path); throw; }

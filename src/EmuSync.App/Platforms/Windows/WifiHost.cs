@@ -15,6 +15,23 @@ public sealed class WifiHost : IAsyncDisposable
     public string? CertificateHash { get; private set; }
     public string? Key { get; private set; }
     public const int Port=42387;
+    // A game's SHA-256 is needed before its download can start. Remember it per scanned Game object, so a
+    // library refresh (which creates new objects) recomputes it, and start hashing before anyone presses Play.
+    readonly System.Runtime.CompilerServices.ConditionalWeakTable<Game,Task<string>> hashes=new();
+    Task<string> GameHash(IGameFolder files,Game game)=>hashes.GetValue(game,g=>Task.Run(async()=> {
+        try
+        {
+            await using var stream=await files.Read(g.FileName);
+            using var hash=IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            var buffer=new byte[1<<20]; int count;
+            while((count=await stream.ReadAsync(buffer))>0) hash.AppendData(buffer,0,count);
+            return Convert.ToHexString(hash.GetHashAndReset());
+        }
+        catch { hashes.Remove(g); throw; }
+    }));
+    void WarmHashes(IGameFolder files,IReadOnlyList<Game> list)=>_=Task.Run(async()=> {
+        foreach(var game in list) { try { await GameHash(files,game); } catch(Exception e) when(e is IOException or UnauthorizedAccessException) { } }
+    });
     public async Task<bool> PreparePlay(Func<Task<bool>> prepare)
     {
         await gate.WaitAsync();
@@ -57,17 +74,16 @@ public sealed class WifiHost : IAsyncDisposable
             catch(Exception e) when(e is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException)
             { if(!context.Response.HasStarted) { context.Response.StatusCode=400; await context.Response.WriteAsync("Transfer failed. Check the PC app."); } }
         });
-        host.MapGet("/api/games",()=>games());
+        host.MapGet("/api/games",()=> { var list=games(); WarmHashes(files,list); return list; });
         host.MapGet("/api/games/{id}/iso",async(string id,HttpContext context)=> {
             var game=games().SingleOrDefault(g=>g.Id==SafePath.GameId(id));
             if(game is null) { context.Response.StatusCode=404; return; }
+            var hash=await GameHash(files,game).WaitAsync(context.RequestAborted);
             await using var stream=await files.Read(game.FileName);
-            var hash=await SHA256.HashDataAsync(stream,context.RequestAborted);
-            stream.Position=0;
             context.Response.ContentLength=stream.Length;
-            context.Response.Headers["X-Content-SHA256"]=Convert.ToHexString(hash);
+            context.Response.Headers["X-Content-SHA256"]=hash;
             context.Response.ContentType="application/octet-stream";
-            await stream.CopyToAsync(context.Response.Body,context.RequestAborted);
+            await stream.CopyToAsync(context.Response.Body,1<<20,context.RequestAborted);
         });
         host.MapGet("/api/saves/{id}/info",async(string id,HttpContext context)=> {
             await gate.WaitAsync(context.RequestAborted);
