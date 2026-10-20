@@ -12,9 +12,10 @@ public sealed class WifiClient : IDisposable
     public WifiClient(Pairing pairing)
     {
         pairing=Pairing.Parse(pairing.Encode());
-        var handler=new HttpClientHandler { AllowAutoRedirect=false, UseProxy=false };
-        handler.ServerCertificateCustomValidationCallback=(_,cert,_,_) => cert is not null &&
-            CryptographicOperations.FixedTimeEquals(SHA256.HashData(cert.RawData),Convert.FromHexString(pairing.Certificate));
+        // A short connect timeout makes an unreachable PC fail in seconds instead of waiting out the transfer timeouts.
+        var handler=new SocketsHttpHandler { AllowAutoRedirect=false, UseProxy=false, ConnectTimeout=TimeSpan.FromSeconds(5) };
+        handler.SslOptions.RemoteCertificateValidationCallback=(_,cert,_,_) => cert is not null &&
+            CryptographicOperations.FixedTimeEquals(SHA256.HashData(cert.GetRawCertData()),Convert.FromHexString(pairing.Certificate));
         client=new HttpClient(handler) { BaseAddress=new Uri($"https://{pairing.Host}:{pairing.Port}/"),Timeout=TimeSpan.FromMinutes(30) };
         client.DefaultRequestHeaders.Add("X-EmuSync-Key",pairing.Key);
     }

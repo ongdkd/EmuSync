@@ -158,6 +158,9 @@ public sealed class LibraryPage : ContentPage
             throw new IOException("Open Settings and select your games folder, PSP folder and PPSSPP first.");
         var game=local.GetValueOrDefault(id)??settings.CachedGames.SingleOrDefault(g=>g.Id==id)??throw new IOException("Select a game from your library.");
         var saves=DeviceFiles.OpenFolder(settings.PspFolder);
+#if ANDROID
+        ((SafFolder)saves).CheckAccess();
+#endif
         var offline=false;
         await Status("Checking your save…");
 #if ANDROID
@@ -202,6 +205,8 @@ public sealed class LibraryPage : ContentPage
             }
             if(!await Sync(id,peer,saves)) return;
         }
+        catch(Java.Lang.SecurityException)
+        { throw new IOException("Android no longer allows EmuSync to use your PSP folder. Open Settings and select it again."); }
         catch(Exception e) when(e is HttpRequestException or TaskCanceledException)
         {
             if(!local.ContainsKey(id)) throw new IOException("Your PC is unavailable and this game is not downloaded. Keep the PC app open on the same Wi-Fi and try again.",e);
@@ -235,8 +240,12 @@ public sealed class LibraryPage : ContentPage
     }
     async Task<bool> Sync(string id,WifiClient peer,IGameFolder saves)
     {
-        var localSave=await SaveBundle.Capture(saves,id);
-        var remote=await peer.Describe(id);
+        // Reading the device save and asking the PC about its copy are independent, so do both at once.
+        var capture=Task.Run(()=>SaveBundle.Capture(saves,id));
+        var describe=peer.Describe(id);
+        await Task.WhenAll(capture,describe);
+        var localSave=await capture;
+        var remote=await describe;
         var baseline=settings.Baselines.GetValueOrDefault(id);
         var missing=baseline?.Paths.Except(localSave.Files.Keys).Any()==true;
         var action=SyncPlan.Decide(localSave.Info.Hash,remote.Info.Hash,baseline?.Hash,localSave.Info.Suspicious||missing||remote.Info.Suspicious);
