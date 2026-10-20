@@ -23,7 +23,7 @@ On **Windows**, open Settings and choose:
 2. PPSSPP's **PSP** folder, containing `SAVEDATA`. Find it in PPSSPP's Settings → System → Memory Stick folder. Select the `PSP` directory, not its parent and not `SAVEDATA` itself.
 3. Your PPSSPP `.exe`. A nearby Memory Stick folder is suggested when it can be detected.
 
-Then click **Copy pairing code**. Transfer that code privately to your Android device. If Windows Firewall asks, allow the app on your private/home network. Keep the PC app open; it listens on HTTPS port 42387. Nothing needs to be exposed to the internet.
+Then click **Copy pairing code**. This is your main PC. To use a second PC, open Settings → Connect to another PC there and paste the same code. Transfer that code privately to your Android device. If Windows Firewall asks, allow the app on your private/home network. Keep the PC app open; it listens on HTTPS port 42387. Nothing needs to be exposed to the internet.
 
 On **Android**, open Settings:
 

@@ -35,12 +35,13 @@
     byId('psp-path').textContent=state.pspFolder||'Select the PSP folder used by PPSSPP.';
     byId('emulator-path').textContent=state.emulator||'Not selected';
     byId('emulator-button').textContent=state.platform==='android'?'Detect PPSSPP':'Choose PPSSPP';
-    byId('host-pairing').hidden=state.platform!=='windows'; byId('phone-pairing').hidden=state.platform!=='android';
-    byId('pair-status').textContent=state.paired?'PC connected. Paste a new code here if pairing changes.':'Copy a pairing code from the PC app, then paste it here.';
+    byId('host-pairing').hidden=state.platform!=='windows';
+    byId('pair-title').textContent=state.platform==='windows'?'Connect to another PC':'Connect your PC';
+    byId('pair-status').textContent=state.paired?'Main PC connected. Paste a new code here if pairing changes.':'Copy a pairing code from the main PC, then paste it here.';
     byId('backup-path').textContent='Backups: '+state.backups;
     const warnings=byId('warnings'); warnings.textContent='';
     warnings.append(...state.warnings.map(message=>{ const li=document.createElement('li'); li.textContent=message; return li; }));
-    byId('connection').textContent=state.platform==='windows'?'Keep this app open for Android · Same Wi-Fi':'Connect to the same Wi-Fi as your PC';
+    byId('connection').textContent=state.platform==='windows'?'Keep this app open for your other devices · Same Wi-Fi':'Connect to the same Wi-Fi as your PC';
     window.setStatus(state.status); buttons();
   };
   async function call(command,value='') {

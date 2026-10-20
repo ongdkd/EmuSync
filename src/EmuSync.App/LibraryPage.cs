@@ -120,14 +120,12 @@ public sealed class LibraryPage : ContentPage
             var folder=DeviceFiles.OpenFolder(settings.GamesFolder);
             await Task.Run(()=>Scan(folder,"",0));
         }
-#if ANDROID
         if(settings.PairCode is not null)
         {
             try { using var peer=new WifiClient(Pairing.Parse(settings.PairCode)); settings.CachedGames=await peer.Games(); }
             catch(Exception e) when(e is IOException or HttpRequestException or TaskCanceledException)
-            { warnings.Add("PC unavailable. Showing your saved library; Play will check the connection again."); }
+            { warnings.Add("Main PC unavailable. Showing your saved library; Play will check the connection again."); }
         }
-#endif
         await StartHost();
         status=local.Count+settings.CachedGames.Count==0?"Add your games folder in Settings to get started.":"Choose a game, then press Play.";
     }
@@ -163,11 +161,19 @@ public sealed class LibraryPage : ContentPage
 #endif
         var offline=false;
         await Status("Checking your save…");
+        // Android always syncs with a PC. A Windows PC does too once it has been paired with another PC.
+        var client=settings.PairCode is not null;
 #if ANDROID
+        client=true;
+#endif
+        if(client)
+        {
         try
         {
+#if ANDROID
             if(!Connectivity.Current.ConnectionProfiles.Any(p=>p is ConnectionProfile.WiFi or ConnectionProfile.Ethernet))
                 throw new HttpRequestException("Connect to the same Wi-Fi as your PC.");
+#endif
             if(settings.PairCode is null) throw new IOException("Connect to your PC in Settings first.");
             using var peer=new WifiClient(Pairing.Parse(settings.PairCode));
             if(!local.ContainsKey(id))
@@ -178,7 +184,7 @@ public sealed class LibraryPage : ContentPage
                 try
                 {
                     var target=id+"-"+Guid.NewGuid().ToString("N")[..8]+".iso";
-                    var folder=new SafFolder(settings.GamesFolder);
+                    var folder=DeviceFiles.OpenFolder(settings.GamesFolder);
                     var partial=target+".part";
                     try
                     {
@@ -192,7 +198,7 @@ public sealed class LibraryPage : ContentPage
                             imported=await IsoReader.Read(verify,target);
                             if(imported.Id!=id) throw new IOException("The downloaded game ID did not match. Nothing will be launched.");
                         }
-                        folder.CompleteGameDownload(partial,target);
+                        CompleteGameDownload(folder,settings.GamesFolder,partial,target);
                         local[id]=imported;
                     }
                     catch
@@ -205,15 +211,20 @@ public sealed class LibraryPage : ContentPage
             }
             if(!await Sync(id,peer,saves)) return;
         }
+#if ANDROID
         catch(Java.Lang.SecurityException)
         { throw new IOException("Android no longer allows EmuSync to use your PSP folder. Open Settings and select it again."); }
+#endif
         catch(Exception e) when(e is HttpRequestException or TaskCanceledException)
         {
-            if(!local.ContainsKey(id)) throw new IOException("Your PC is unavailable and this game is not downloaded. Keep the PC app open on the same Wi-Fi and try again.",e);
-            if(!await DisplayAlertAsync("Play offline?","Your PC could not be reached. Your latest save cannot be checked. You can use your local save and sync it later.","Play offline","Cancel")) return;
+            if(!local.ContainsKey(id)) throw new IOException("The main PC is unavailable and this game is not downloaded. Keep the PC app open on the same Wi-Fi and try again.",e);
+            if(!await DisplayAlertAsync("Play offline?","The main PC could not be reached. Your latest save cannot be checked. You can use your local save and sync it later.","Play offline","Cancel")) return;
             offline=true;
         }
-#else
+        }
+#if WINDOWS
+        else
+        {
         if(host is null) await StartHost();
         if(!await host!.PreparePlay(async()=> {
             if(DeviceFiles.EmulatorRunning()) throw new IOException("Close PPSSPP before syncing.");
@@ -221,6 +232,7 @@ public sealed class LibraryPage : ContentPage
             if(snapshot.Info.Suspicious && !await DisplayAlertAsync("Save needs attention","Some save files are empty. A backup will be kept. Continue with this local save?","Continue","Cancel")) return false;
             await Backup(id,snapshot); session=id; return true;
         })) return;
+        }
 #endif
         await settings.Save();
         session=id;
@@ -233,9 +245,28 @@ public sealed class LibraryPage : ContentPage
 #if WINDOWS
         session=null;
         await Backup(id,await SaveBundle.Capture(saves,id));
-        await Status("Session finished · Your saves are available to Android.");
+        if(client && !offline)
+        {
+            try
+            {
+                using var peer=new WifiClient(Pairing.Parse(settings.PairCode!));
+                if(await Sync(id,peer,saves)) await Status("Session finished · Your progress is synced to the main PC.");
+            }
+            catch(Exception e) when(e is IOException or HttpRequestException or TaskCanceledException)
+            { await Status("Progress is still on this PC. "+e.Message); }
+        }
+        else await Status(client?"Session finished · Progress has not synced.":"Session finished · Your saves are available to your other devices.");
 #else
         await Status("Playing in PPSSPP · Return here when you finish.");
+#endif
+    }
+    static void CompleteGameDownload(IGameFolder folder,string root,string partial,string target)
+    {
+#if ANDROID
+        ((SafFolder)folder).CompleteGameDownload(partial,target);
+#else
+        SafePath.Validate(partial); SafePath.Validate(target);
+        File.Move(Path.Combine(root,partial),Path.Combine(root,target),false);
 #endif
     }
     async Task<bool> Sync(string id,WifiClient peer,IGameFolder saves)
