@@ -6,7 +6,7 @@ This is an independent first implementation inspired by [emu-sync/EmuSync](https
 
 ## Try the builds
 
-[Download the Windows installer and Android APK](https://github.com/ongdkd/EmuSync/releases/tag/v1.0.1-preview.3). Android 1.0.1 includes the startup-crash fix; install it over the original app without uninstalling or clearing data. This is a preview build; physical Android testing is still pending. No games, saves, or PPSSPP binaries are included.
+[Download Android 1.0.2](https://github.com/ongdkd/EmuSync/releases/tag/v1.0.2-preview.1). It retains the startup fix and latest app changes, restores the original signing certificate, and increases the version code. Install over the original app without uninstalling or clearing data. The APK from `v1.0-preview.1` used a different key and cannot be updated in place with the original key; preserve its private data before considering removal. [Windows downloads](https://github.com/ongdkd/EmuSync/releases/tag/v1.0-preview.1) are unchanged by this Android signing fix. This is a preview build; physical Android testing is still pending. No games, saves, or PPSSPP binaries are included.
 
 - **Windows:** run `dist/EmuSync-Setup-1.0.0-x64.exe`. It installs for your Windows account, adds a Start menu shortcut, and includes an uninstaller. The installer is unsigned, so Windows may display a warning. The portable build at `dist/Windows/EmuSync.App.exe` also works; keep that entire folder together.
 - **Android:** install `dist/EmuSync-Android.apk` on a 64-bit ARM device running Android 8 or newer. This is a development-signed sideload build, not a Play Store release.
@@ -77,6 +77,8 @@ Requires .NET SDK 10.0.300 (or a compatible patch), the `maui-windows` and `maui
 ```
 
 `build.ps1` prefers the isolated toolchain when available. `Directory.Build.props` locates the project-local Android SDK and JDK. Otherwise install the workloads and dependencies using Microsoft's MAUI installation instructions.
+
+Android release builds require the original private signing keystore at `.tools/signing/emusync.keystore` (the original development key's `androiddebugkey` alias and development passwords). Back it up privately; never commit or upload it. A fresh machine must restore that key rather than generate another. `build.ps1` explicitly selects it and runs `tests/android-package-check.ps1` before copying the APK into `dist`; the check pins the original public certificate, verifies the package/version, and checks 16 KB alignment. `release.ps1` uses the Android display version for the release tag.
 
 The `Installer` target packages the existing `dist/Windows` build using Inno Setup 7 (installed normally or under `.tools/inno`). Publish Windows again before packaging changes. `tests/installer-check.ps1` verifies a silent installation, installed file hashes, Start menu/uninstall entries, and removal in an isolated test directory; it stops if this Windows account already has EmuSync installed.
 

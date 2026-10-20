@@ -1,25 +1,23 @@
-# EmuSync — Android startup fix
+# EmuSync — Android update compatibility fix
 
-Android **1.0.1** fixes the immediate startup crash in the first preview. The original APK failed before the app UI with a missing `MauiApplication.n_onCreate` native callback. This build disables the affected native marshal optimization and regenerates the callback registration ([upstream issue](https://github.com/dotnet/maui/issues/35209)).
+Android **1.0.2** restores the original EmuSync signing certificate and raises the Android version code to **3**. It includes the app changes from `v1.0-preview.1` and retains the startup-crash and older-WebView fixes.
 
-Download `EmuSync-Android.apk` and install it **over your existing app**. It keeps the same application ID and signing certificate, with a higher Android version code. Do not uninstall or clear app data to update. Games, saves, pairing, and settings are not reset by this update.
+Download `EmuSync-Android.apk` and install it **over the original app or Android 1.0.1 from `v1.0.1-preview.3`**. No uninstall or data clearing is needed. The package ID remains `app.emusync.local`.
+
+The APK published in `v1.0-preview.1` used a different signing key. Android cannot replace that installation with an APK signed by the original key. If you installed that particular APK, do not uninstall it before preserving its app-private settings/backups. Selecting a new key does not recover access to another key's private data.
 
 ## Downloads
 
-- **Windows:** `EmuSync-Setup-1.0.0-x64.exe` is unchanged from the first preview. Requires 64-bit Windows 10 version 1809 or later, or Windows 11. No PC reinstall is needed for this Android fix.
-- **Android:** download and install `EmuSync-Android.apk`. Requires an ARM64 device with Android 8 or newer. Allow installation from your browser when prompted.
-- `SHA256SUMS.txt` contains checksums for both downloads.
+- **Android:** `EmuSync-Android.apk`, for ARM64 devices with Android 8 or newer.
+- `SHA256SUMS.txt` contains the APK checksum.
+- **Windows:** no update is needed for this signing fix. The [latest existing Windows portable build](https://github.com/ongdkd/EmuSync/releases/tag/v1.0-preview.1) remains available separately.
 
-Install PPSSPP separately. No games or saves are included. See the [README](https://github.com/ongdkd/EmuSync#one-time-setup) for folder selection and pairing.
+Install PPSSPP separately. No games or saves are included.
 
 ## Validation and preview limits
 
-The original APK's native startup crash was reproduced on an Android 16 emulator. This update also fixes UI loading on older WebViews that lack `replaceChildren`.
+The build now explicitly uses the original keystore and checks the finished APK's public certificate, package ID, version, and 16 KB alignment before accepting it. The incompatible APK from `v1.0-preview.1` is rejected by the same check. The private key is excluded from Git and release assets.
 
-The tagged source passed launch, the actual JavaScript-to-.NET setup call through saved app data, and cold relaunch on Android 11 and Android 16 native x64 emulators. Both setup screenshots were inspected, and neither run logged a fatal startup error. The ARM64 APK's signing identity, higher version code, and packaged startup callback were verified separately. [View passing startup checks](https://github.com/ongdkd/EmuSync/actions/runs/39297812047).
+Core and UI regression checks cover synthetic saves/transfers and the actual interface. Android startup validation builds the tagged source for native x64 emulators; the downloadable ARM64 package is checked separately. See the [startup workflow](https://github.com/ongdkd/EmuSync/actions/workflows/android-startup.yml) for results.
 
-All 39 automated core checks passed. The Windows installer retains its previously verified installation/uninstall behavior.
-
-The Windows installer is unsigned, so Windows may warn. The Android APK uses a development signing key and is intended for evaluation. CSO/CHD, save states, internet/cloud sync, and automatic updates are not included.
-
-Physical Android permissions and real PPSSPP launches with user games/saves have not been tested. Keep external backups while trying this preview.
+This remains a development-signed preview. Physical S24 Ultra installation, Android folder permissions, and real PPSSPP launches/sync with user games and saves have not been tested.
