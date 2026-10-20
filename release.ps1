@@ -9,10 +9,13 @@ if($LASTEXITCODE -ne 0) { throw 'Not signed in to GitHub. Run: .tools\gh\bin\gh.
 function Run-Git { $ErrorActionPreference='Continue'; git @args 2>&1 | Out-Host; if($LASTEXITCODE -ne 0) { throw "git $args failed" } }
 
 .\build.ps1 -Target All
-$installer = Get-ChildItem dist -Filter 'EmuSync-Setup-*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+$windowsVersion = ([xml](Get-Content src\EmuSync.App\EmuSync.App.csproj)).SelectSingleNode('//ApplicationDisplayVersion').InnerText
+$installer = Get-Item -LiteralPath "dist\EmuSync-Setup-$windowsVersion-x64.exe" -ErrorAction SilentlyContinue
+if($installer) { .\build.ps1 -Target Installer }
 $assets = @('dist\EmuSync-Android.apk')
 if($installer) { $assets += $installer.FullName } else {
-  Compress-Archive -Path 'dist\Windows\*' -DestinationPath 'dist\EmuSync-Windows-portable.zip' -Force
+  $portableFiles=Get-ChildItem -LiteralPath 'dist\Windows' | Where-Object { $_.Name -notlike '*.WebView2' }
+  Compress-Archive -LiteralPath $portableFiles.FullName -DestinationPath 'dist\EmuSync-Windows-portable.zip' -Force
   $assets += 'dist\EmuSync-Windows-portable.zip'
 }
 

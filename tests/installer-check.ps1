@@ -20,7 +20,8 @@ try {
   $registration = Get-ItemProperty -LiteralPath $uninstallKey
   if($registration.InstallLocation.TrimEnd('\') -ne $installDir) { throw 'Incorrect uninstall registration.' }
   if(-not (Test-Path -LiteralPath (Join-Path $shortcutFolder 'EmuSync.lnk'))) { throw 'Start menu shortcut missing.' }
-  $files = @(Get-ChildItem -LiteralPath $source -File -Recurse)
+  $files = @(Get-ChildItem -LiteralPath $source -File -Recurse | Where-Object { $_.FullName -notmatch '\\[^\\]+\.WebView2\\' })
+  if(Get-ChildItem -LiteralPath $installDir -Directory -Recurse -Filter '*.WebView2') { throw 'Installer copied a runtime browser profile.' }
   foreach($file in $files) {
     $relative = $file.FullName.Substring($source.Length).TrimStart('\')
     $installedFile = Join-Path $installDir $relative

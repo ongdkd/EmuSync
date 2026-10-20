@@ -1,17 +1,31 @@
 const assert=require('node:assert/strict');
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 (async()=>{
-  const browser=await chromium.connectOverCDP('http://127.0.0.1:9422');
+  const browser=await chromium.connectOverCDP(process.env.EMUSYNC_CDP_URL||'http://127.0.0.1:9422');
   try {
-    const pages=browser.contexts().flatMap(c=>c.pages());
-    const page=pages.find(p=>p.url().startsWith('https://0.0.0.1/'));
+    let page;
+    for(let attempt=0;attempt<100;attempt++) {
+      page=browser.contexts().flatMap(c=>c.pages()).find(p=>p.url().startsWith('https://0.0.0.1/'));
+      if(page) break;
+      await new Promise(resolve=>setTimeout(resolve,200));
+    }
     assert(page,'Native app WebView not found');
     await page.locator('#setup').waitFor({state:'visible',timeout:20000});
     assert.equal(await page.locator('#error').isVisible(),false,await page.locator('#error').textContent());
     assert.match(await page.locator('#status').innerText(),/Add your games folder/);
     assert(await page.locator('#host-pairing').isVisible());
     assert.equal(await page.locator('.game').count(),0);
+    await page.locator('#sync-provider').selectOption('drive');
+    try {
+      await page.locator('#drive-setup').waitFor({state:'visible'});
+      assert(await page.locator('#drive-help').isVisible(),'Unconfigured build must show setup guidance');
+      assert(await page.locator('#drive-connect').isDisabled(),'Do not attempt Google consent without registration');
+      assert(await page.locator('#host-pairing').isHidden());
+    } finally {
+      await page.locator('#sync-provider').selectOption('wifi');
+      await page.locator('#host-pairing').waitFor({state:'visible'});
+    }
     await page.screenshot({path:require('node:path').resolve(__dirname,'../dist/native-windows.png'),fullPage:true});
-    console.log('PASS: published Windows executable starts, loads its embedded UI, and completes a real JavaScript-to-.NET setup call.');
+    console.log('PASS: published Windows startup, real native setup bridge, Drive mode/configuration gating, and switching back to Wi-Fi.');
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});

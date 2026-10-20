@@ -15,4 +15,6 @@ The private Android signing key is unchanged, and version code 4 updates an orig
 
 64 automated checks cover synthetic save safety, HTTPS pairing, verified game transfers, Drive branches, cancelled conflicts, stale updates, delayed indexing, resumable chunks, hostile upload locations, duplicate ISOs, and corrupted downloads. UI checks cover both sync choices, configuration gating, optional game uploads, selection without syncing, and responsive layouts. Both platform implementations compile without warnings.
 
+The native Windows executable passed startup, Drive setup gating, and switching back to Wi-Fi. Installation verified 760 files and clean uninstall; generated browser profiles are excluded from packages. [Android 11/16 startup and cold-relaunch checks passed](https://github.com/ongdkd/EmuSync/actions/runs/39442651944) on native x64 emulators; the ARM64 APK's original signature, version, and 16 KB alignment were checked separately. The later candidate revision only adjusts packaging, tests, and these notes; its app sources match the tested tag.
+
 Google consent, token refresh/revocation, real Drive API behavior, and Windows-to-S24 transfers still require live validation after app registration. No user Google Drive files have been read or uploaded. The Android APK remains development-signed; the Windows installer is unsigned.
