@@ -24,7 +24,7 @@ if(git status --porcelain) { Run-Git commit -m "$Message`n`nCo-Authored-By: Clau
 $branch = git rev-parse --abbrev-ref HEAD
 Run-Git push -u origin $branch
 
-$version = ([xml](Get-Content src\EmuSync.App\EmuSync.App.csproj)).SelectNodes("//ApplicationDisplayVersion")[-1].InnerText
+$version = @(([xml](Get-Content src\EmuSync.App\EmuSync.App.csproj)).SelectNodes("//ApplicationDisplayVersion"))[-1].InnerText
 $n = @(git ls-remote --tags origin "v$version-preview.*").Count + 1
 $tag = "v$version-preview.$n"
 & $gh release create $tag @assets --target $branch --prerelease --title "EmuSync $version preview $n" --generate-notes

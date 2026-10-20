@@ -32,36 +32,80 @@
     if(open) requestAnimationFrame(()=>{ if(!byId('setup').hidden) byId('close-setup').focus(); });
     else if(returnFocus && document.contains(returnFocus)) returnFocus.focus();
   }
+  const size=game=>{ const megabytes=game.size/1024/1024; return megabytes>=1024?(megabytes/1024).toFixed(1)+' GB':Math.max(1,Math.round(megabytes))+' MB'; };
+  const toneOf=game=>tones[Array.from(game.id).reduce((sum,letter)=>sum+letter.charCodeAt(0),0)%tones.length];
+  function artwork(game,className) {
+    const frame=document.createElement('span'); frame.className=className;
+    frame.style.backgroundImage=`linear-gradient(145deg,${toneOf(game)},#141c26)`;
+    const background=image(game.background);
+    if(background) { const back=document.createElement('img'); back.className='cover-backdrop'; back.src=background; back.alt=''; back.loading='lazy'; frame.append(back); }
+    const art=image(game.icon);
+    const logo=document.createElement(art?'img':'span'); logo.className='thumb'+(art?'':' fallback');
+    if(art) { logo.src=art; logo.alt=''; logo.loading='lazy'; } else { logo.textContent=game.title; logo.setAttribute('aria-hidden','true'); }
+    frame.append(logo);
+    return frame;
+  }
+  function card(game,feature) {
+    const installed=state.installed.includes(game.id);
+    const button=document.createElement('button'); button.type='button'; button.className='game'+(feature?' feature':'')+(installed?' installed':'');
+    button.setAttribute('aria-pressed',String(game.id===state.selected));
+    const title=document.createElement('strong'),subtitle=document.createElement('small');
+    title.textContent=game.title; subtitle.textContent=installed?'On this device':state.syncProvider==='drive'?'Download from Drive':'Download from PC';
+    if(feature) {
+      const panel=document.createElement('span'); panel.className='feature-panel';
+      const icon=document.createElement('span'); icon.className='feature-icon'; icon.textContent=installed?'\▶':'\↓'; icon.setAttribute('aria-hidden','true');
+      const text=document.createElement('span'); text.className='feature-text';
+      text.append(title,subtitle); panel.append(icon,text);
+      button.append(artwork(game,'feature-art'),panel);
+    } else {
+      const cover=artwork(game,'cover');
+      const tag=document.createElement('span'); tag.className='cover-console'; tag.textContent='PSP'; tag.setAttribute('aria-hidden','true'); cover.prepend(tag);
+      if(!installed) { const download=document.createElement('span'); download.className='cover-download'; download.textContent='\↓'; download.setAttribute('aria-hidden','true'); cover.append(download); }
+      const label=document.createElement('span'); label.className='game-label'; label.append(title,subtitle);
+      button.append(cover,label);
+    }
+    button.addEventListener('click',async()=>{ if(await call('select',game.id)) { detailOpen=true; views(); window.scrollTo(0,0); byId('back-library').focus(); } });
+    return button;
+  }
+  function edges(row) {
+    const shelf=row.closest('.shelf');
+    shelf.classList.toggle('scrollable',row.scrollWidth>row.clientWidth+1);
+    shelf.classList.toggle('at-start',row.scrollLeft<=1);
+    shelf.classList.toggle('at-end',row.scrollLeft+row.clientWidth>=row.scrollWidth-1);
+  }
+  function shelf(name,note,games) {
+    const section=document.createElement('section'); section.className='shelf';
+    const heading=document.createElement('div'); heading.className='shelf-heading';
+    const title=document.createElement('h2'); title.textContent=name;
+    const count=document.createElement('span'); count.className='shelf-note'; count.textContent=note;
+    const row=document.createElement('div'); row.className='shelf-row';
+    const arrows=document.createElement('span'); arrows.className='shelf-arrows';
+    for(const [label,glyph,direction] of [['Scroll left','\‹',-1],['Scroll right','\›',1]]) {
+      const arrow=document.createElement('button'); arrow.type='button'; arrow.className='shelf-arrow'; arrow.textContent=glyph; arrow.setAttribute('aria-label',label);
+      arrow.addEventListener('click',()=>row.scrollBy({left:direction*row.clientWidth*.8,behavior:'smooth'}));
+      arrows.append(arrow);
+    }
+    heading.append(title,count,arrows);
+    games.forEach((game,index)=>row.append(card(game,index===0)));
+    row.addEventListener('scroll',()=>edges(row),{passive:true});
+    section.append(heading,row);
+    return section;
+  }
   function renderGames() {
     const query=byId('search').value.trim().toLocaleLowerCase();
     const games=byId('games'); games.textContent='';
     const matches=state.games.filter(game=>game.title.toLocaleLowerCase().includes(query));
-    for(const game of matches) {
-      const installed=state.installed.includes(game.id);
-      const button=document.createElement('button'); button.type='button'; button.className='game'+(installed?' installed':'');
-      button.setAttribute('aria-pressed',String(game.id===state.selected));
-      const cover=document.createElement('span'); cover.className='cover';
-      const tone=tones[Array.from(game.id).reduce((sum,letter)=>sum+letter.charCodeAt(0),0)%tones.length];
-      cover.style.backgroundImage=`linear-gradient(145deg,${tone},#18232f)`;
-      const background=image(game.background);
-      if(background) { const back=document.createElement('img'); back.className='cover-backdrop'; back.src=background; back.alt=''; back.loading='lazy'; cover.append(back); }
-      const tag=document.createElement('span'); tag.className='cover-console'; tag.textContent='PSP'; tag.setAttribute('aria-hidden','true'); cover.append(tag);
-      const art=image(game.icon);
-      const logo=document.createElement(art?'img':'span'); logo.className='thumb'+(art?'':' fallback');
-      if(art) { logo.src=art; logo.alt=''; logo.loading='lazy'; } else { logo.textContent=game.title.slice(0,2).toUpperCase(); logo.setAttribute('aria-hidden','true'); }
-      cover.append(logo);
-      if(!installed) { const download=document.createElement('span'); download.className='cover-download'; download.textContent='↓'; download.setAttribute('aria-hidden','true'); cover.append(download); }
-      const title=document.createElement('strong'),subtitle=document.createElement('small');
-      title.textContent=game.title; subtitle.textContent=installed?'On this device':state.syncProvider==='drive'?'Download from Drive':'Download from PC';
-      button.append(cover,title,subtitle);
-      button.addEventListener('click',async()=>{ if(await call('select',game.id)) { detailOpen=true; views(); window.scrollTo(0,0); byId('back-library').focus(); } });
-      games.append(button);
-    }
+    const recentFirst=list=>{ const index=list.findIndex(game=>game.id===state.selected); return index>0?[list[index],...list.slice(0,index),...list.slice(index+1)]:list; };
+    const local=recentFirst(matches.filter(game=>state.installed.includes(game.id)));
+    const remote=recentFirst(matches.filter(game=>!state.installed.includes(game.id)));
+    const count=list=>list.length+' '+(list.length===1?'game':'games');
+    if(local.length) games.append(shelf('Ready to play',count(local)+' on this device',local));
+    if(remote.length) games.append(shelf('Download to play',count(remote)+(state.syncProvider==='drive'?' on Google Drive':' on your PC'),remote));
+    requestAnimationFrame(()=>games.querySelectorAll('.shelf-row').forEach(edges));
     byId('empty').hidden=state.games.length!==0;
     byId('no-results').hidden=state.games.length===0 || matches.length!==0;
     byId('game-count').textContent=state.games.length+' '+(state.games.length===1?'game':'games');
     document.querySelector('.search-box').hidden=state.games.length===0;
-    byId('choose-label').textContent=query?'Search results':'All games';
     buttons();
   }
   window.setState=value=>{
@@ -72,15 +116,18 @@
     if(!selected) detailOpen=false;
     if(selected) {
       const installed=state.installed.includes(selected.id);
-      byId('play').textContent=installed?'▶   Play':'↓   Download & Play';
+      byId('play').textContent=installed?'\▶   Play':'\↓   Download & Play';
+      byId('play').classList.toggle('download',!installed);
       byId('game-title').textContent=selected.title;
-      byId('game-location').textContent=installed?'On this device':drive?'Available on Google Drive':'Available on your PC';
+      byId('game-id').textContent=selected.id;
+      byId('game-location').textContent=installed?'On this device':drive?'On Google Drive':'On your PC';
       const background=image(selected.background),icon=image(selected.icon);
-      byId('hero').style.backgroundImage=background?`url("${background}")`:'linear-gradient(125deg,#2d4960,#152330 75%)';
+      const banner=background?`url("${background}")`:`linear-gradient(125deg,${toneOf(selected)},#141c26 75%)`;
+      byId('hero').style.backgroundImage=banner;
+      byId('game-backdrop').style.backgroundImage=banner;
       byId('detail-art').hidden=!!background || !icon;
       if(icon) byId('detail-art').src=icon; else byId('detail-art').removeAttribute('src');
-      const megabytes=selected.size/1024/1024;
-      byId('game-size').textContent=(megabytes>=1024?(megabytes/1024).toFixed(1)+' GB':Math.max(1,Math.round(megabytes))+' MB')+' · ISO';
+      byId('game-size').textContent=size(selected)+' · ISO';
       byId('sync-game').checked=state.syncGames[selected.id]!==false;
     }
     byId('games-path').textContent=state.gamesFolder||'Not selected';
@@ -97,7 +144,7 @@
     byId('drive-disconnect').textContent=state.driveConnected?'Disconnect':'Reset connection';
     byId('drive-connect').textContent=state.driveConnected?'Reconnect Google Drive':'Connect Google Drive';
     byId('play-note').textContent=drive && (!state.driveConnected || !state.driveConfigured)?'Connect Google Drive in Settings before playing with cloud sync.':'Your save is checked before PPSSPP opens. Different progress asks first.';
-    byId('sync-caption').textContent=(drive?'Google Drive':'Same Wi-Fi')+' · Check on Play';
+    byId('sync-caption').textContent=drive?'Google Drive sync':'Wi-Fi sync';
     byId('upload-game').hidden=!drive || !selected || !state.installed.includes(selected.id);
     byId('download-label').textContent=drive?'Download this game from Drive when needed':'Download this game from PC when needed';
     byId('empty').querySelector('p').textContent=drive?'Add a local games folder, then connect Google Drive to find your uploaded games.':'Add a games folder, or connect your main PC to find games you can download.';
@@ -143,6 +190,7 @@
   });
   byId('back-library').addEventListener('click',showLibrary);
   byId('library-nav').addEventListener('click',showLibrary);
+  window.addEventListener('resize',()=>document.querySelectorAll('.shelf-row').forEach(edges));
   byId('search').addEventListener('input',()=>{ if(state) renderGames(); });
   byId('clear-search').addEventListener('click',()=>{ byId('search').value=''; renderGames(); byId('search').focus(); });
   byId('play').addEventListener('click',()=>call('play',state.selected));

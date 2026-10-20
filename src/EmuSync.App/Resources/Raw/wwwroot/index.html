@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-src 'none'; object-src 'none'">
-  <meta name="theme-color" content="#151c25">
+  <meta name="theme-color" content="#171d25">
   <title>EmuSync</title>
   <link rel="stylesheet" href="app.css">
   <script src="_framework/hybridwebview.js"></script>
@@ -21,19 +21,37 @@
     <section class="library" aria-label="Game library">
       <section id="library-browse">
         <div class="library-heading"><div><p class="eyebrow">PLAYSTATION PORTABLE</p><h1>Your library<span id="game-count">0 games</span></h1></div><label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input id="search" type="search" placeholder="Find a game" aria-label="Search games" autocomplete="off"></label></div>
-        <div class="shelf-heading"><h2 id="choose-label">All games</h2><span>Save check on Play</span></div>
         <nav id="games" aria-label="Select a game"></nav>
         <div id="empty" class="empty-state" hidden><span class="empty-icon" aria-hidden="true">＋</span><h2>Your next game starts here.</h2><p>Choose a games folder, or connect your other device to find your PSP games.</p><button id="empty-settings" class="primary" type="button">Set up your library</button></div>
         <div id="no-results" class="empty-state" hidden><h2>No games found</h2><p>Try another title or clear your search.</p><button id="clear-search" type="button">Clear search</button></div>
         <p id="library-status" class="library-status" role="status" aria-live="polite">Choose a game, then press Play.</p>
       </section>
       <section id="selected" hidden aria-label="Selected game">
-        <div class="detail-toolbar"><button id="back-library" class="quiet-button" type="button"><span aria-hidden="true">←</span> Library</button><span id="game-location" class="availability">On this device</span></div>
-        <div class="hero" id="hero"><img id="detail-art" alt="" hidden><div class="hero-title"><span class="console-tag">PSP</span><h1 id="game-title"></h1><p>PlayStation Portable</p></div></div>
-        <div class="controls">
-          <div class="action-row"><button id="play" class="primary play" type="button">▶ Play</button><div class="sync-summary"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18a4 4 0 0 1-1-7.9A7 7 0 0 1 18.5 8 5 5 0 0 1 19 18"/><path d="m9 17 2 2 4-5"/></svg><div><strong>Save sync</strong><span id="sync-caption">Check on Play</span></div></div><p id="game-size" class="game-size"></p></div>
-          <div class="play-feedback"><span class="status-dot" aria-hidden="true"></span><span id="status" role="status" aria-live="polite">Save check on Play</span></div><p id="play-note">Press Play to sync your save, then open PPSSPP.</p>
-          <details id="game-options"><summary>Game options</summary><div class="options-content"><label class="checkbox"><input id="sync-game" type="checkbox" checked><span id="download-label">Download this game from PC when needed</span></label><button id="upload-game" type="button" hidden>Upload game to Drive</button><p>Backups are kept before replacing saves. Different progress asks which copy to use.</p></div></details>
+        <div id="game-backdrop" class="game-backdrop" aria-hidden="true"></div>
+        <div class="hero" id="hero">
+          <button id="back-library" class="back-button" type="button"><span aria-hidden="true">←</span> Library</button>
+          <img id="detail-art" alt="" hidden>
+          <div class="hero-title"><span class="console-tag">PSP</span><h1 id="game-title"></h1></div>
+        </div>
+        <div class="detail-body">
+          <div class="action-bar">
+            <button id="play" class="primary play" type="button">▶ Play</button>
+            <div class="stat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18a4 4 0 0 1-1-7.9A7 7 0 0 1 18.5 8 5 5 0 0 1 19 18"/><path d="m9 17 2 2 4-5"/></svg><div><span class="stat-label">Save sync</span><span id="sync-caption">Check on Play</span></div></div>
+            <div class="stat"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="3"/><path d="M7 12h3m-1.5-1.5v3M16 11h.1m1.9 2h.1"/></svg><div><span class="stat-label">Location</span><span id="game-location">On this device</span></div></div>
+            <div class="stat"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg><div><span class="stat-label">Size</span><span id="game-size"></span></div></div>
+          </div>
+          <p class="detail-source">PlayStation Portable · <span id="game-id"></span></p>
+          <div class="detail-columns">
+            <section class="activity" aria-label="Activity">
+              <div class="activity-card">
+                <div class="play-feedback"><span class="status-dot" aria-hidden="true"></span><span id="status" role="status" aria-live="polite">Save check on Play</span></div>
+                <p id="play-note">Press Play to sync your save, then open PPSSPP.</p>
+              </div>
+            </section>
+            <aside class="side-panel" aria-label="Game options">
+              <details id="game-options"><summary>Game options</summary><div class="options-content"><label class="checkbox"><input id="sync-game" type="checkbox" checked><span id="download-label">Download this game from PC when needed</span></label><button id="upload-game" type="button" hidden>Upload game to Drive</button><p>Backups are kept before replacing saves. Different progress asks which copy to use.</p></div></details>
+            </aside>
+          </div>
         </div>
       </section>
     </section>

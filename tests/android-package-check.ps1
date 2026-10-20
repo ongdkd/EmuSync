@@ -10,8 +10,8 @@ if($LASTEXITCODE -ne 0 -or $signature -notcontains 'Signer #1 certificate SHA-25
   throw 'APK is not signed with the original EmuSync key. Publishing it would break updates.'
 }
 $project=[xml](Get-Content (Join-Path $root 'src\EmuSync.App\EmuSync.App.csproj'))
-$version=$project.SelectNodes('//ApplicationVersion')[-1].InnerText
-$display=$project.SelectNodes('//ApplicationDisplayVersion')[-1].InnerText
+$version=@($project.SelectNodes('//ApplicationVersion'))[-1].InnerText
+$display=@($project.SelectNodes('//ApplicationDisplayVersion'))[-1].InnerText
 $manifest=& "$buildTools\aapt2.exe" dump badging $Apk
 if($LASTEXITCODE -ne 0 -or -not ($manifest | Where-Object { $_.StartsWith("package: name='app.emusync.local' versionCode='$version' versionName='$display' ") })) {
   throw 'APK package identity or version does not match the Android project.'
