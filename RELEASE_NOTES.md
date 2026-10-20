@@ -26,6 +26,8 @@ If the Google consent app is still in Testing mode, only its configured test use
 
 64 automated checks cover save backups/recovery, conflicts, stale writes, concurrent Drive snapshots, delayed indexing, resumable ISO uploads, verified downloads, and hostile input. UI and native Windows checks cover configuration gating and switching between Drive and Wi-Fi. Installer checks verify installed file hashes, shortcuts, and clean uninstall; runtime browser profiles are excluded from packages. ARM64 package checks verify original signing identity, version, and 16 KB alignment. Android startup checks use source builds on native x64 emulators, not the downloadable ARM64 package.
 
+Both download packages were verified to contain the supplied native Google registration. The configured Windows executable enables Connect Google Drive; its installer passed verification of 761 installed files and clean uninstall. [Android 11 and Android 16 startup and cold-relaunch checks passed](https://github.com/ongdkd/EmuSync/actions/runs/39452697587), with no fatal startup markers in either emulator log. Uploaded file hashes and sizes match the checked local packages.
+
 Live Google consent, token renewal/revocation, Drive transfers between real devices, and S24 Ultra behavior are not yet independently verified. This is a preview: keep external backups of important saves, finish syncing before switching devices, and avoid simultaneous play of the same game.
 
 The Windows installer is unsigned; Android uses the original development signing key. Uncompressed PSP ISO files and regular SAVEDATA are supported. Save states, CSO/CHD, and automatic app updates are not included. Interrupted ISO uploads currently restart when retried.
