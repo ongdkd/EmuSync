@@ -18,6 +18,6 @@ Install PPSSPP separately. No games or saves are included.
 
 The build now explicitly uses the original keystore and checks the finished APK's public certificate, package ID, version, and 16 KB alignment before accepting it. The incompatible APK from `v1.0-preview.1` is rejected by the same check. The private key is excluded from Git and release assets.
 
-Core and UI regression checks cover synthetic saves/transfers and the actual interface. Android startup validation builds the tagged source for native x64 emulators; the downloadable ARM64 package is checked separately. See the [startup workflow](https://github.com/ongdkd/EmuSync/actions/workflows/android-startup.yml) for results.
+All 39 core checks and the UI regression check passed. The tagged source passed startup, the real JavaScript-to-.NET setup call, and cold relaunch with persisted settings on Android 11 and Android 16 native x64 emulators. Both setup screenshots were inspected and neither emulator logged a fatal startup error. The downloadable ARM64 package's signature, version, alignment, and startup callback were checked separately. [View passing startup checks](https://github.com/ongdkd/EmuSync/actions/runs/39436860562).
 
 This remains a development-signed preview. Physical S24 Ultra installation, Android folder permissions, and real PPSSPP launches/sync with user games and saves have not been tested.
