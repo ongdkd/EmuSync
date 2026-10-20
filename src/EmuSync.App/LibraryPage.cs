@@ -86,7 +86,7 @@ public sealed class LibraryPage : ContentPage
                     var psp=await DeviceFiles.PickFolder();
                     if(psp is not null)
                     {
-                        var entries=await DeviceFiles.OpenFolder(psp).List();
+                        var entries=await OpenSaves(psp).List();
                         if(entries.Any(e=>e.IsDirectory && e.Name=="PSP")) throw new IOException("Open the PSP folder inside that location and select it. It should contain SAVEDATA.");
                         if(!entries.Any(e=>e.Name=="SAVEDATA") && entries.Any(e=>e.IsDirectory && System.Text.RegularExpressions.Regex.IsMatch(e.Name,"^[A-Z]{4}[0-9]{5}")))
                             throw new IOException("That looks like SAVEDATA. Select its parent PSP folder instead.");
@@ -146,7 +146,7 @@ public sealed class LibraryPage : ContentPage
         {
             if(DeviceFiles.EmulatorRunning() || !await DisplayAlertAsync("Restore interrupted sync?","Close PPSSPP first. A previous save transfer stopped before finishing. Restore its original backup before continuing?","Restore backup","Cancel"))
                 throw new IOException("An interrupted sync needs recovery. Close PPSSPP and use Refresh games in Settings.");
-            await SaveBundle.Recover(DeviceFiles.OpenFolder(settings.PspFolder),backups);
+            await SaveBundle.Recover(OpenSaves(settings.PspFolder),backups);
         }
         if(settings.GamesFolder is not null)
         {
@@ -196,7 +196,7 @@ public sealed class LibraryPage : ContentPage
         if(settings.GamesFolder is null || settings.PspFolder is null || settings.Emulator is null)
             throw new IOException("Open Settings and select your games folder, PSP folder and PPSSPP first.");
         var game=local.GetValueOrDefault(id)??(Drive?settings.CachedDriveGames:settings.CachedGames).SingleOrDefault(g=>g.Id==id)??throw new IOException("Select a game from your library.");
-        var saves=DeviceFiles.OpenFolder(settings.PspFolder);
+        var saves=OpenSaves(settings.PspFolder);
 #if ANDROID
         ((SafFolder)saves).CheckAccess();
 #endif
@@ -401,7 +401,7 @@ public sealed class LibraryPage : ContentPage
             var id=session; session=null;
             if(settings.PspFolder is null) return;
             using var peer=await Peer();
-            if(await Sync(id,peer,DeviceFiles.OpenFolder(settings.PspFolder))) await Status($"Your progress is synced to {(Drive?"Google Drive":"PC")}.");
+            if(await Sync(id,peer,OpenSaves(settings.PspFolder))) await Status($"Your progress is synced to {(Drive?"Google Drive":"PC")}.");
         }
         catch(Exception error)
         { await Status("Progress is still on this device. "+error.Message); await DisplayAlertAsync("Progress not synced",status,"OK"); }
@@ -414,13 +414,21 @@ public sealed class LibraryPage : ContentPage
         await Task.CompletedTask;
 #endif
     }
+    static IGameFolder OpenSaves(string path)
+    {
+#if WINDOWS
+        return new LocalFolder(path,allowSaveDataLink:true);
+#else
+        return DeviceFiles.OpenFolder(path);
+#endif
+    }
     async Task StartHost()
     {
 #if WINDOWS
         if(Drive) return;
         if(settings.PspFolder is null || settings.GamesFolder is null) return;
         host??=new WifiHost();
-        await host.Start(DeviceFiles.OpenFolder(settings.PspFolder),DeviceFiles.OpenFolder(settings.GamesFolder),()=>local.Values.ToArray(),()=>session is not null || DeviceFiles.EmulatorRunning(),FileSystem.AppDataDirectory);
+        await host.Start(OpenSaves(settings.PspFolder),DeviceFiles.OpenFolder(settings.GamesFolder),()=>local.Values.ToArray(),()=>session is not null || DeviceFiles.EmulatorRunning(),FileSystem.AppDataDirectory);
 #else
         await Task.CompletedTask;
 #endif

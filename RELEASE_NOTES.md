@@ -1,29 +1,27 @@
-# EmuSync 1.1.1 — Google account switching fix
+# EmuSync 1.1.2 — EmuDeck linked-save support
 
-Windows could save an OAuth token before Drive finished verifying the account. If Drive then refused the request, the app showed only **Connect**, hid Disconnect, and silently reused the same token on the next attempt.
+EmuDeck's Windows PPSSPP setup links `memstick\PSP\SAVEDATA` to its central save folder. EmuSync previously rejected that directory with "Linked folders are not supported for syncing," even when the selected PSP folder was correct.
 
-- **Connect/Reconnect on Windows now opens Google's account chooser**, requests fresh consent, and keeps PKCE enabled. Background syncing still reuses valid tokens.
-- Settings offers **Reset connection** even before a Drive connection succeeds. Once connected, the button becomes **Disconnect**. Resetting keeps local saves, settings, and Drive files.
-- An already invalid/revoked Windows token no longer blocks resetting the connection.
+Windows now resolves the top-level SAVEDATA link and pins its destination while that save folder is open. Save capture, verified replacement, restore/recovery, and Wi-Fi hosting all use the same mapping. Links inside individual saves remain blocked; capture pauses rather than silently omitting linked content. Games and backup folders do not gain link-following behavior.
 
 ## Update
 
-- **Windows:** close EmuSync, then run `EmuSync-Setup-1.1.1-x64.exe` over the current installation. Existing settings, games, saves, and backups are preserved.
-- **Android:** install `EmuSync-Android.apk` over an original-key installation. Version code is **6**, with the same package and original signing certificate. Do not uninstall or clear app data to update. The shared interface gains Reset connection; the native Android authorization flow is unchanged.
+- **Windows:** close EmuSync and run `EmuSync-Setup-1.1.2-x64.exe` over the existing installation. Keep the same PPSSPP `memstick\PSP` folder selected. There is no need to move saves, remove EmuDeck's links, or change PPSSPP's storage configuration.
+- **Android:** install `EmuSync-Android.apk` over an original-key installation. Version code is **7**, with the same package and original signing certificate. Its native folder access is unchanged. Do not uninstall or clear app data to update.
 - `SHA256SUMS.txt` contains checksums for both downloads.
 
-After updating Windows, choose **Settings → Google Drive → Connect Google Drive** and select the account you want. If needed, use **Reset connection** first. Use the same account on both devices. Revoking Google access may require reconnecting other devices; Drive files remain in their original account.
+The Windows Google account chooser and Reset connection fix from 1.1.1 is retained. Drive sync still needs Google Drive API enabled in the OAuth project's Cloud Console; Testing-mode Google apps require the chosen account in their test-user list.
 
-The alternate-key Android APK from `v1.0-preview.1` cannot be updated in place with this original-key APK. Preserve its private data before considering removal.
+The alternate-key Android APK from `v1.0-preview.1` cannot be updated in place with the original-key APK. Preserve its private data before considering removal.
 
 ## Validation and limits
 
-64 core checks cover save safety, backups/recovery, conflicts, verified transfers, and Drive snapshots/game transfers. A new check executes the production Windows authentication code with isolated storage and Google's SDK: valid background token reuse, interactive reconnection after cached sign-in, account chooser/consent parameters, offline refresh-token request, PKCE, and cancellation cleanup. The test stops before Google consent or token exchange. UI checks cover resetting before account verification, connection status, provider/configuration gating, and responsive layouts.
+78 checks cover the existing save/Drive/transfer protection plus isolated Windows junction fixtures matching EmuDeck's layout. New checks cover recognizing SAVEDATA, capture from the real destination, verified writes, backup/restore and deletion of replaced game files, preserving other games, rejecting nested-link reads/writes/deletes and incomplete capture, a link retargeted during an active sync, and broken-link rejection. Tests use synthetic files in a temporary fixture; no user saves or EmuDeck configuration are modified.
 
-Both platform builds and Windows installer compilation passed. Android package checks verified the original signing identity, version 1.1.1/code 6, and 16 KB alignment. Both packages contain the configured Google registration and final UI assets, verified against the local source by SHA-256.
+Both platform builds, Windows installer compilation, and the production Windows authentication regression check passed. Android package checks verified version 1.1.2/code 7, the original signing certificate, and 16 KB alignment. Both packages retain the supplied native Google registration, verified by SHA-256.
 
-This fixes account switching; it does not change the Google project's API configuration, consent audience, or account storage limits. If Google Drive API is disabled, enable it in the same Cloud project that owns the OAuth clients. If the consent app is in Testing mode, the chosen account must be an allowed test user. [Setup guide](https://github.com/ongdkd/EmuSync/blob/main/docs/google-drive-setup.md).
+Live Google consent, real Drive transfers, the user's actual EmuDeck installation, and physical S24 Ultra behavior still require validation. Installer install/uninstall and native Windows UI checks are not repeated against the user's running installation. Earlier Android 11/16 startup checks apply to the preceding 1.1.0 source, not this APK.
 
-Live Google consent, token renewal/revocation, real Drive transfers, and physical S24 Ultra behavior still require validation. Native Android startup checks passed for the preceding 1.1.0 source on Android 11/16; those emulator checks are not a test of this updated APK. Installer install/uninstall and native Windows UI checks have not been repeated against the user's running installation.
+The Windows installer is unsigned; Android uses the original development signing key. Keep external backups of important saves. Automatic app updates and save-state sync are not included.
 
-The Windows installer is unsigned; Android uses the original development signing key. Keep external backups of important saves. Automatic app updates are not included.
+Reference: [EmuDeck Windows PPSSPP save-link setup](https://github.com/EmuDeck/emudeck-we/blob/main/functions/EmuScripts/emuDeckPPSSPP.ps1).

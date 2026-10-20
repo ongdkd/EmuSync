@@ -44,6 +44,8 @@ The PC can be off when Android syncs through Drive. You need internet, enough Dr
 
 ## Save protection and limits
 
+On Windows with EmuDeck, keep its PPSSPP `memstick\PSP` folder selected. EmuSync supports a linked `SAVEDATA` directory, resolving its destination once when opening saves. The same mapping is used for sync, backups/recovery, and Wi-Fi hosting. Links inside the save tree pause sync to prevent incomplete or redirected saves; links in games and backup folders remain blocked. There is no need to move or unlink EmuDeck's saves.
+
 If sign-in succeeds but connecting Drive fails, choose **Reset connection** in Settings to clear the saved sign-in, then connect again. On Windows, Connect/Reconnect opens Google's account chooser each time. Resetting or disconnecting keeps your local saves and Drive files; revoking access may require reconnecting other devices. An already revoked Windows token can also be reset.
 
 - Files are stored in an **EmuSync** folder in My Drive. The app only requests access to files it creates/uses, not your entire Drive.

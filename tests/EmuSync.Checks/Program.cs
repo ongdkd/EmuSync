@@ -24,6 +24,7 @@ var root=Path.Combine(Path.GetTempPath(),"emusync-check-"+Guid.NewGuid().ToStrin
 Directory.CreateDirectory(root);
 try
 {
+    checks+=await LinkedSaveChecks.Run(root);
     var folder=new LocalFolder(Path.Combine(root,"PSP"));
     await folder.Write("SAVEDATA/ULUS12345/DATA.BIN",new MemoryStream([1,2,3]));
     await folder.Write("SAVEDATA/ULUS99999/DATA.BIN",new MemoryStream([9]));
@@ -118,7 +119,7 @@ finally
         throw new IOException("Refusing cleanup outside the test directory.");
     Directory.Delete(resolved,true);
 }
-Console.WriteLine($"PASS: {checks} checks (sync decisions, backups, ISO metadata, TLS pinning, authentication, stale-update protection, Drive history/conflicts and game transfer).");
+Console.WriteLine($"PASS: {checks} checks (sync decisions, linked save folders, backups, ISO metadata, TLS pinning, authentication, stale-update protection, Drive history/conflicts and game transfer).");
 
 sealed class FailingFolder(IGameFolder inner) : IGameFolder
 {
