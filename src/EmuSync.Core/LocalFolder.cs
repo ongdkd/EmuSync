@@ -10,8 +10,8 @@ public sealed class LocalFolder(string root,bool allowSaveDataLink=false) : IGam
         var link=new DirectoryInfo(Path.Combine(Path.GetFullPath(root),"SAVEDATA"));
         if(!link.Exists && link.LinkTarget is null) return null;
         if(!link.Attributes.HasFlag(FileAttributes.ReparsePoint)) return null;
-        // EmuDeck links this one save directory; pin its destination for the lifetime of this sync.
-        var target=link.ResolveLinkTarget(true) as DirectoryInfo;
+        // Read the link without traversing it; RedirectionGuard blocks final-target resolution.
+        var target=link.ResolveLinkTarget(returnFinalTarget:false) as DirectoryInfo;
         if(target is null || !target.Exists || target.Attributes.HasFlag(FileAttributes.ReparsePoint))
             throw new IOException("The SAVEDATA link has no usable destination. Check the save location in EmuDeck.");
         return target.FullName;

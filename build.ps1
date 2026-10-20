@@ -11,6 +11,7 @@ if(Test-Path -LiteralPath "$tools\tmp") { $env:TEMP="$tools\tmp"; $env:TMP=$env:
 function Run-Dotnet { & $dotnetPath @args; if($LASTEXITCODE -ne 0) { throw "Build failed: dotnet $args" } }
 New-Item -ItemType Directory -Force -Path (Join-Path $PSScriptRoot 'dist') | Out-Null
 Run-Dotnet run --project tests/EmuSync.Checks
+if($env:OS -eq 'Windows_NT') { Run-Dotnet run --project tests/EmuSync.Checks -- --redirection-guard }
 Run-Dotnet run --project tests/EmuSync.AuthChecks
 if($Target -in 'All','Windows') {
   Run-Dotnet publish src/EmuSync.App/EmuSync.App.csproj -f net10.0-windows10.0.19041.0 -c Release '-p:WindowsPackageType=None' '-p:WindowsAppSDKSelfContained=true' '-p:SelfContained=true' -o dist/Windows

@@ -13,6 +13,8 @@ static class LinkedSaveChecks
         var psp=Path.Combine(fixture,"PSP");
         var actual=Path.Combine(fixture,"Emulation","saves","ppsspp","saves");
         var elsewhere=Path.Combine(fixture,"unrelated");
+        try
+        {
         Directory.CreateDirectory(psp); Directory.CreateDirectory(actual); Directory.CreateDirectory(elsewhere);
         var data=new LocalFolder(actual);
         await data.Write("ULUS12345/DATA.BIN",new MemoryStream([1,2,3]));
@@ -20,6 +22,11 @@ static class LinkedSaveChecks
         await File.WriteAllBytesAsync(Path.Combine(elsewhere,"sentinel.bin"),[7]);
         var link=Path.Combine(psp,"SAVEDATA");
         Link(link,actual);
+        if(WindowsRedirectionChecks.Enabled)
+        {
+            try { await File.ReadAllBytesAsync(Path.Combine(link,"ULUS12345","DATA.BIN")); throw new Exception("The guarded fixture must reject raw junction traversal."); }
+            catch(IOException error) when((error.HResult&0xffff)==448) { checks++; }
+        }
         await Reject(()=>SaveBundle.Capture(new LocalFolder(psp),"ULUS12345"),"Generic/game folders must still block linked children");
         var saves=new LocalFolder(psp,allowSaveDataLink:true);
         Check((await saves.List()).Any(e=>e.Name=="SAVEDATA" && e.IsDirectory),"PSP picker recognizes the mapped SAVEDATA folder");
@@ -58,6 +65,13 @@ static class LinkedSaveChecks
         try { await Reject(()=>Task.FromResult(new LocalFolder(psp,allowSaveDataLink:true)),"Broken SAVEDATA link must pause sync"); }
         finally { Directory.Delete(link); }
         return checks;
+        }
+        finally
+        {
+            // Unlink fixture junctions before recursive cleanup, including when guard enforcement stops the test.
+            foreach(var item in new[]{Path.Combine(actual,"ULUS12345","ESCAPE"),Path.Combine(psp,"SAVEDATA")})
+                if(new DirectoryInfo(item).LinkTarget is not null) Directory.Delete(item);
+        }
     }
     static void Link(string path,string target)
     {

@@ -4,6 +4,7 @@ using System.Buffers.Binary;
 using System.Text;
 using EmuSync.App;
 
+if(args.Contains("--redirection-guard")) WindowsRedirectionChecks.Enable();
 int checks=0;
 void Check(bool ok,string message) { if(!ok) throw new Exception(message); checks++; }
 void Reject(Action action) { try { action(); } catch(Exception e) when(e is InvalidDataException or FormatException) { checks++; return; } throw new Exception("Unsafe input accepted."); }
