@@ -1,6 +1,8 @@
 # One-time Google Drive setup
 
-The Drive integration is implemented, but Google sign-in cannot work until EmuSync is registered in **your Google Cloud project**. The currently published Android 1.0.2 remains the Wi-Fi build. Do not replace it expecting cloud sync before this setup is complete.
+The distributed **1.1.0 preview** includes Google app registration. If you downloaded that release, skip to **Use it** below; you do not need to create your own Google Cloud project. If the consent app is in Testing mode, its owner must add your Google account as a test user before sign-in can succeed.
+
+The steps below are for maintainers or people building their own registered copy. Source builds require an OAuth configuration file from the same Google Cloud project for both platforms.
 
 ## Register the app
 

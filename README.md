@@ -2,13 +2,13 @@
 
 A small Windows + Android launcher for PPSSPP. Choose a game and press **Play**: check and sync the save, ask if progress conflicts, then open PPSSPP.
 
-This is an independent implementation inspired by [emu-sync/EmuSync](https://github.com/emu-sync/EmuSync). The published 1.0.2 build uses your PC as the shared library on local Wi-Fi. The 1.1.0 source adds optional Google Drive sync; it needs Google app registration before sign-in is available.
+This is an independent implementation inspired by [emu-sync/EmuSync](https://github.com/emu-sync/EmuSync). Choose local Wi-Fi sharing or Google Drive. With Drive, each device signs into the same Google account and your PC does not need to stay on.
 
 ## Try the builds
 
-[Download Android 1.0.2](https://github.com/ongdkd/EmuSync/releases/tag/v1.0.2-preview.1). It retains the startup fix and latest app changes, restores the original signing certificate, and increases the version code. Install over the original app without uninstalling or clearing data. The APK from `v1.0-preview.1` used a different key and cannot be updated in place with the original key; preserve its private data before considering removal. [Windows downloads](https://github.com/ongdkd/EmuSync/releases/tag/v1.0-preview.1) are unchanged by this Android signing fix. This is a preview build; physical Android testing is still pending. No games, saves, or PPSSPP binaries are included.
+[Download the Windows installer and Android APK](https://github.com/ongdkd/EmuSync/releases/tag/v1.1.0-preview.3). This preview includes Google app registration. Install over the original-key Android app without uninstalling or clearing data. The APK from `v1.0-preview.1` used a different key and cannot be updated in place with the original key; preserve its private data before considering removal. Live Google sync and physical Android testing remain pending. No games, saves, or PPSSPP binaries are included.
 
-- **Windows:** run `dist/EmuSync-Setup-1.0.0-x64.exe`. It installs for your Windows account, adds a Start menu shortcut, and includes an uninstaller. The installer is unsigned, so Windows may display a warning. The portable build at `dist/Windows/EmuSync.App.exe` also works; keep that entire folder together.
+- **Windows:** run the downloaded setup executable. It installs or updates for your Windows account, adds a Start menu shortcut, and includes an uninstaller. The installer is unsigned, so Windows may display a warning. The portable build at `dist/Windows/EmuSync.App.exe` also works; keep that entire folder together.
 - **Android:** install `dist/EmuSync-Android.apk` on a 64-bit ARM device running Android 8 or newer. This is a development-signed sideload build, not a Play Store release.
 
 PPSSPP must be installed separately on each device.
@@ -17,7 +17,7 @@ Windows uninstall removes the installed app only. Your selected games/save folde
 
 ## One-time setup
 
-For the Google Drive preview, complete the [Google registration and build setup](docs/google-drive-setup.md) first. It supports save sync plus optional ISO uploads/downloads, with no PC required to stay on. Live Google sign-in and real-device cloud transfers have not yet been tested. The Wi-Fi setup below continues to work.
+The distributed Google Drive preview is already registered. After selecting your local folders and PPSSPP, choose **Google Drive → Connect Google Drive** on each device. Use the same account. To share an ISO, select it and choose **Game settings → Upload game to Drive**. Save checks happen on Play; missing games download when needed. If Google's consent app is in Testing mode, the project owner must add accounts as test users. Live Google sign-in and real-device cloud transfers have not yet been independently verified. The Wi-Fi setup below continues to work. [Usage and source-build registration guide](docs/google-drive-setup.md).
 
 On **Windows**, open Settings and choose:
 

@@ -18,8 +18,9 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache
     await page.locator('#sync-provider').selectOption('drive');
     try {
       await page.locator('#drive-setup').waitFor({state:'visible'});
-      assert(await page.locator('#drive-help').isVisible(),'Unconfigured build must show setup guidance');
-      assert(await page.locator('#drive-connect').isDisabled(),'Do not attempt Google consent without registration');
+      const configured=process.env.EMUSYNC_EXPECT_DRIVE_CONFIGURED==='1';
+      assert.equal(await page.locator('#drive-help').isVisible(),!configured,'Setup guidance must match the packaged Google configuration');
+      assert.equal(await page.locator('#drive-connect').isEnabled(),configured,'Google consent must be available only in configured builds');
       assert(await page.locator('#host-pairing').isHidden());
     } finally {
       await page.locator('#sync-provider').selectOption('wifi');

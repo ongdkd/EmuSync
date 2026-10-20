@@ -1,20 +1,31 @@
-# EmuSync 1.1.0 — Google Drive integration candidate
+# EmuSync 1.1.0 — Google Drive preview
 
-This candidate adds Google Drive to Windows and Android alongside existing Wi-Fi sync:
+Windows and Android now include Google app registration, so **Connect Google Drive** is available without creating your own Google Cloud project.
 
-- Connect the same Google account on both devices. Check saves on Play; ask on conflicts or incomplete progress.
-- Preserve separate remote snapshots and local backups, including concurrent uploads from different devices.
-- Optionally upload an ISO from Game settings. Missing games download, verify, and launch when you choose Download & Play.
-- Windows syncs again after PPSSPP exits; Android asks you to confirm the game is closed before uploading progress.
+## Downloads and update
 
-**Google app registration is not configured yet.** Google sign-in remains disabled until the [one-time setup](https://github.com/ongdkd/EmuSync/blob/main/docs/google-drive-setup.md) is completed and both apps are rebuilt. The public Android 1.0.2 remains the Wi-Fi download. These candidate files are for review; they do not yet provide a verified working Google account connection.
+- **Windows:** close EmuSync and run `EmuSync-Setup-1.1.0-x64.exe`. It updates the existing per-user installation while preserving app settings, games, and saves.
+- **Android:** install `EmuSync-Android.apk` over an original-key installation. The original signing certificate is retained and Android version code is now **5**. Do not clear data or uninstall to update.
+- `SHA256SUMS.txt` contains checksums for both downloads.
 
-The private Android signing key is unchanged, and version code 4 updates an original-key installation without clearing its data. The incompatible alternate-key APK from v1.0-preview.1 still cannot be replaced in place by an original-key APK. Do not uninstall it before preserving private data.
+The alternate-key Android APK from `v1.0-preview.1` cannot be replaced in place by this original-key APK. Preserve its private data before considering removal.
 
-## Validation
+## Use Google Drive
 
-64 automated checks cover synthetic save safety, HTTPS pairing, verified game transfers, Drive branches, cancelled conflicts, stale updates, delayed indexing, resumable chunks, hostile upload locations, duplicate ISOs, and corrupted downloads. UI checks cover both sync choices, configuration gating, optional game uploads, selection without syncing, and responsive layouts. Both platform implementations compile without warnings.
+1. On each device, keep your local games folder, PPSSPP PSP folder, and emulator selected.
+2. In Settings, choose **Google Drive** and **Connect Google Drive**. Use the same Google account on each device.
+3. Select a locally installed game and open **Game settings → Upload game to Drive** to make its ISO available to other devices. Uploads are optional and consume your Drive quota.
+4. Choose **Play** or **Download & Play**. Saves are checked first; conflicting or incomplete progress asks before replacement.
+5. Windows syncs after PPSSPP exits. On Android, save and exit PPSSPP, return to EmuSync, and confirm **Game is closed · Sync**.
 
-The native Windows executable passed startup, Drive setup gating, and switching back to Wi-Fi. Installation verified 760 files and clean uninstall; generated browser profiles are excluded from packages. [Android 11/16 startup and cold-relaunch checks passed](https://github.com/ongdkd/EmuSync/actions/runs/39442651944) on native x64 emulators; the ARM64 APK's original signature, version, and 16 KB alignment were checked separately. The later candidate revision only adjusts packaging, tests, and these notes; its app sources match the tested tag.
+Your PC can be off while another device syncs through Drive. Wi-Fi pairing remains available as a separate choice. Files are kept in an EmuSync folder in My Drive; the app requests access to app-created/selected files rather than your entire Drive.
 
-Google consent, token refresh/revocation, real Drive API behavior, and Windows-to-S24 transfers still require live validation after app registration. No user Google Drive files have been read or uploaded. The Android APK remains development-signed; the Windows installer is unsigned.
+If the Google consent app is still in Testing mode, only its configured test users can sign in. Other accounts may see an access-blocked message until the project owner adds them or completes Google's publication requirements. [Usage and developer setup](https://github.com/ongdkd/EmuSync/blob/main/docs/google-drive-setup.md).
+
+## Validation and limits
+
+64 automated checks cover save backups/recovery, conflicts, stale writes, concurrent Drive snapshots, delayed indexing, resumable ISO uploads, verified downloads, and hostile input. UI and native Windows checks cover configuration gating and switching between Drive and Wi-Fi. Installer checks verify installed file hashes, shortcuts, and clean uninstall; runtime browser profiles are excluded from packages. ARM64 package checks verify original signing identity, version, and 16 KB alignment. Android startup checks use source builds on native x64 emulators, not the downloadable ARM64 package.
+
+Live Google consent, token renewal/revocation, Drive transfers between real devices, and S24 Ultra behavior are not yet independently verified. This is a preview: keep external backups of important saves, finish syncing before switching devices, and avoid simultaneous play of the same game.
+
+The Windows installer is unsigned; Android uses the original development signing key. Uncompressed PSP ISO files and regular SAVEDATA are supported. Save states, CSO/CHD, and automatic app updates are not included. Interrupted ISO uploads currently restart when retried.
