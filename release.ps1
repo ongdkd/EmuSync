@@ -6,7 +6,7 @@ $gh=Join-Path $PSScriptRoot '.tools\gh\bin\gh.exe'
 if(-not (Test-Path -LiteralPath $gh)) { $gh='gh' }
 & $gh auth status *> $null
 if($LASTEXITCODE -ne 0) { throw 'Not signed in to GitHub. Run: .tools\gh\bin\gh.exe auth login' }
-function Git { git @args; if($LASTEXITCODE -ne 0) { throw "git $args failed" } }
+function Run-Git { $ErrorActionPreference='Continue'; git @args 2>&1 | Out-Host; if($LASTEXITCODE -ne 0) { throw "git $args failed" } }
 
 .\build.ps1 -Target All
 $installer = Get-ChildItem dist -Filter 'EmuSync-Setup-*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -16,10 +16,10 @@ if($installer) { $assets += $installer.FullName } else {
   $assets += 'dist\EmuSync-Windows-portable.zip'
 }
 
-Git add -A
-if(git status --porcelain) { Git commit -m "$Message`n`nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>" }
+Run-Git add -A
+if(git status --porcelain) { Run-Git commit -m "$Message`n`nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>" }
 $branch = git rev-parse --abbrev-ref HEAD
-Git push -u origin $branch
+Run-Git push -u origin $branch
 
 $version = ([xml](Get-Content src\EmuSync.App\EmuSync.App.csproj)).SelectSingleNode("//ApplicationDisplayVersion").InnerText
 $n = @(git ls-remote --tags origin "v$version-preview.*").Count + 1
