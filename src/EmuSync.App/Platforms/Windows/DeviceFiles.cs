@@ -1,5 +1,6 @@
 using EmuSync.Core;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace EmuSync.App;
 
@@ -27,6 +28,15 @@ public static class DeviceFiles
         finally { p.Dispose(); }
     });
     public static string GamePath(string root,string relative)=>Path.Combine(root,SafePath.Validate(relative).Replace('/',Path.DirectorySeparatorChar));
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr window,int command);
+    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr window);
+    public static void ShowApp()
+    {
+        var window=(MauiWinUIWindow)Application.Current!.Windows[0].Handler.PlatformView!;
+        ShowWindow(window.WindowHandle,9);
+        window.Activate();
+        SetForegroundWindow(window.WindowHandle);
+    }
     public static async Task Launch(string executable,string file)
     {
         if(EmulatorRunning()) throw new IOException("PPSSPP is already running. Close it before syncing and playing.");

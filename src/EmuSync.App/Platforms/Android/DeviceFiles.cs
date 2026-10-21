@@ -33,9 +33,11 @@ public static class DeviceFiles
     public static string GamePath(string root,string relative)=>new SafFolder(root).GetUri(relative).ToString()!;
     public static Task Launch(string executable,string file)
     {
+        if(executable is not ("org.ppsspp.ppsspp" or "org.ppsspp.ppssppgold")) throw new IOException("Detect PPSSPP again in Settings.");
         var intent=new Intent(Intent.ActionView);
         intent.SetClassName(executable,"org.ppsspp.ppsspp.PpssppActivity");
         intent.SetDataAndType(Uri.Parse(file),"application/octet-stream");
+        intent.PutExtra("org.ppsspp.ppsspp.Args","--pause-menu-exit");
         intent.AddFlags(ActivityFlags.GrantReadUriPermission|ActivityFlags.NewTask);
         intent.ClipData=ClipData.NewRawUri("PSP game",Uri.Parse(file));
         Platform.CurrentActivity!.StartActivity(intent);

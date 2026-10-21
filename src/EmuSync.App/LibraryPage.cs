@@ -27,6 +27,9 @@ public sealed class LibraryPage : ContentPage
     {
         BackgroundColor=Color.FromArgb("#171D25");
         settings=Settings.Load();
+#if ANDROID
+        session=settings.PendingSession;
+#endif
         Content=web;
         web.SetInvokeJavaScriptTarget(new Bridge(this));
     }
@@ -39,7 +42,7 @@ public sealed class LibraryPage : ContentPage
         await gate.WaitAsync();
         try
         {
-            if(session is not null && command is "games-folder" or "psp-folder" or "emulator" or "pair" or "refresh" or "sync-provider" or "drive-connect" or "drive-disconnect" or "upload-game")
+            if(session is not null && command is "games-folder" or "psp-folder" or "emulator" or "get-ppsspp" or "add-game" or "refresh" or "sync-provider" or "drive-disconnect" or "upload-game")
                 throw new IOException("Finish your PPSSPP session before changing setup.");
             if(command=="psp-folder" && SaveBundle.RecoveryNeeded(Path.Combine(FileSystem.AppDataDirectory,"backups")))
                 throw new IOException("Restore the interrupted sync using Refresh games before changing your PSP folder.");
@@ -47,6 +50,11 @@ public sealed class LibraryPage : ContentPage
             {
                 case "load": if(!loaded) { await Load(); loaded=true; } break;
                 case "refresh": await Load(); break;
+                case "add-game": await AddGame(); break;
+                case "get-ppsspp":
+                    await Launcher.Default.OpenAsync(DeviceInfo.Platform==DevicePlatform.Android?"https://play.google.com/store/apps/details?id=org.ppsspp.ppsspp":"https://www.ppsspp.org/download/");
+                    status="Install PPSSPP, then choose it in Settings."; break;
+                case "finish-session": await FinishSession(); break;
                 case "sync-provider":
                     if(value is not ("wifi" or "drive")) throw new IOException("Choose Wi-Fi or Google Drive.");
                     settings.SyncProvider=value; await RestartHost(); await Load(); break;
@@ -125,6 +133,27 @@ public sealed class LibraryPage : ContentPage
         finally { gate.Release(); }
     }
     record GameOption(string Id,bool Enabled);
+    protected override bool OnBackButtonPressed()
+    {
+#if ANDROID
+        _=NavigateBack();
+        return true;
+#else
+        return base.OnBackButtonPressed();
+#endif
+    }
+#if ANDROID
+    async Task NavigateBack()
+    {
+        if(gate.CurrentCount==0) return;
+        try
+        {
+            var handled=await web.EvaluateJavaScriptAsync("window.navigateBack?.() ?? false");
+            if(handled!="true") Platform.CurrentActivity?.MoveTaskToBack(true);
+        }
+        catch(InvalidOperationException) { }
+    }
+#endif
     object State()
     {
         var games=local.Values.Concat(Drive?settings.CachedDriveGames:settings.CachedGames).DistinctBy(g=>g.Id).OrderBy(g=>g.Title).ToArray();
@@ -220,32 +249,7 @@ public sealed class LibraryPage : ContentPage
                 if(!settings.SyncGames.GetValueOrDefault(id,true) && !await DisplayAlertAsync("Download game?",$"{game.Title} is not on this device. Download it from {(Drive?"Google Drive":"your PC")}?","Download","Cancel")) return;
                 await Status("Preparing game download…");
                 var downloaded=await peer.DownloadGame(game,FileSystem.CacheDirectory,message=>_ = MainThread.InvokeOnMainThreadAsync(()=>Status(message)));
-                try
-                {
-                    var target=id+"-"+Guid.NewGuid().ToString("N")[..8]+".iso";
-                    var folder=DeviceFiles.OpenFolder(settings.GamesFolder);
-                    var partial=target+".part";
-                    try
-                    {
-                        await using(var input=File.OpenRead(downloaded.Path)) await folder.Write(partial,input);
-                        Game imported;
-                        await using(var verify=await folder.Read(partial))
-                        {
-                            if(Convert.ToHexString(await SHA256.HashDataAsync(verify))!=downloaded.Hash)
-                                throw new IOException("The game copy failed verification. Nothing will be launched.");
-                            verify.Position=0;
-                            imported=await IsoReader.Read(verify,target);
-                            if(imported.Id!=id) throw new IOException("The downloaded game ID did not match. Nothing will be launched.");
-                        }
-                        CompleteGameDownload(folder,settings.GamesFolder,partial,target);
-                        local[id]=imported;
-                    }
-                    catch
-                    {
-                        try { await folder.Delete(partial); } catch(Exception cleanup) { warnings.Add("An unfinished .part download remains in your games folder: "+cleanup.Message); }
-                        throw;
-                    }
-                }
+                try { await InstallGame(id,downloaded.Path,downloaded.Hash); }
                 finally { File.Delete(downloaded.Path); }
             }
             if(!await Sync(id,peer,saves)) return;
@@ -277,14 +281,25 @@ public sealed class LibraryPage : ContentPage
         session=id;
 #if ANDROID
         leftForGame=false;
+        settings.PendingSession=id;
+        await settings.Save();
 #endif
         await Status(offline?"Playing offline · Progress has not synced.":"Opening PPSSPP…");
         try { await DeviceFiles.Launch(settings.Emulator,DeviceFiles.GamePath(settings.GamesFolder,local[id].FileName)); }
-        catch { session=null; throw; }
+        catch
+        {
+            session=null;
+#if ANDROID
+            settings.PendingSession=null;
+            await settings.Save();
+#endif
+            throw;
+        }
 #if WINDOWS
+        DeviceFiles.ShowApp();
         session=null;
         await Backup(id,await SaveBundle.Capture(saves,id));
-        if(client && !offline)
+        if(client)
         {
             try
             {
@@ -298,6 +313,61 @@ public sealed class LibraryPage : ContentPage
 #else
         await Status("Playing in PPSSPP · Return here when you finish.");
 #endif
+    }
+    async Task AddGame()
+    {
+        var file=await FilePicker.Default.PickAsync(new PickOptions { PickerTitle="Add a PSP game ISO",FileTypes=new FilePickerFileType(new Dictionary<DevicePlatform,IEnumerable<string>> {
+            {DevicePlatform.WinUI,[".iso"]},{DevicePlatform.Android,["*/*"]}
+        }) });
+        if(file is null) return;
+        if(!file.FileName.EndsWith(".iso",StringComparison.OrdinalIgnoreCase)) throw new IOException("Choose an uncompressed PSP .iso file.");
+        if(settings.GamesFolder is null)
+        {
+            await DisplayAlertAsync("Choose your games folder","Select where EmuSync should keep your games. The original ISO stays where it is.","Choose folder");
+            var root=await DeviceFiles.PickFolder();
+            if(root is null) return;
+            settings.GamesFolder=root;
+            await settings.Save();
+            await Load();
+        }
+        await Status("Adding game · Checking ISO…");
+        await using var input=await file.OpenReadAsync();
+        var staged=await Task.Run(()=>GameImport.Stage(input,FileSystem.CacheDirectory));
+        try
+        {
+            if(local.ContainsKey(staged.Game.Id)) { settings.Selected=staged.Game.Id; status="This game is already in your library."; return; }
+            await Status("Adding game · Copying and verifying…");
+            await Task.Run(()=>InstallGame(staged.Game.Id,staged.Path,staged.Hash));
+            settings.Selected=staged.Game.Id;
+            await StartHost();
+            status=staged.Game.Title+" added to your library.";
+        }
+        finally { File.Delete(staged.Path); }
+    }
+    async Task InstallGame(string id,string source,string hash)
+    {
+        var target=id+"-"+Guid.NewGuid().ToString("N")[..8]+".iso";
+        var folder=DeviceFiles.OpenFolder(settings.GamesFolder!);
+        var partial=target+".part";
+        try
+        {
+            await using(var input=File.OpenRead(source)) await folder.Write(partial,input);
+            Game imported;
+            await using(var verify=await folder.Read(partial))
+            {
+                if(Convert.ToHexString(await SHA256.HashDataAsync(verify))!=hash) throw new IOException("The game copy failed verification. Nothing will be launched.");
+                verify.Position=0;
+                imported=await IsoReader.Read(verify,target);
+                if(imported.Id!=id) throw new IOException("The game ID did not match. Nothing will be launched.");
+            }
+            CompleteGameDownload(folder,settings.GamesFolder!,partial,target);
+            local[id]=imported;
+        }
+        catch
+        {
+            try { await folder.Delete(partial); } catch(Exception cleanup) { warnings.Add("An unfinished .part copy remains in your games folder: "+cleanup.Message); }
+            throw;
+        }
     }
     static void CompleteGameDownload(IGameFolder folder,string root,string partial,string target)
     {
@@ -393,23 +463,40 @@ public sealed class LibraryPage : ContentPage
     public async Task Returned()
     {
 #if ANDROID
-        if(!leftForGame || session is null || !await gate.WaitAsync(0)) return;
+        if(!leftForGame || session is null || gate.CurrentCount==0) return;
+        leftForGame=false;
         try
         {
+            await web.EvaluateJavaScriptAsync("window.setBusy?.(true)");
+            await Invoke("finish-session","");
+        }
+        finally
+        {
             leftForGame=false;
+            await web.EvaluateJavaScriptAsync("window.setState?.("+JsonSerializer.Serialize(State(),Json)+");window.setBusy?.(false)");
+        }
+#else
+        await Task.CompletedTask;
+#endif
+    }
+    async Task FinishSession()
+    {
+#if ANDROID
+        if(session is null) return;
+        try
+        {
             if(!await DisplayAlertAsync("Finished playing?",$"Exit the game in PPSSPP before syncing your progress to {(Drive?"Google Drive":"PC")}.","Game is closed · Sync","Still playing")) return;
-            var id=session; session=null;
+            var id=SafePath.GameId(session);
             if(settings.PspFolder is null) return;
             using var peer=await Peer();
-            if(await Sync(id,peer,OpenSaves(settings.PspFolder))) await Status($"Your progress is synced to {(Drive?"Google Drive":"PC")}.");
+            if(await Sync(id,peer,OpenSaves(settings.PspFolder)))
+            {
+                settings.PendingSession=null; await settings.Save(); session=null;
+                await Status($"Your progress is synced to {(Drive?"Google Drive":"PC")}.");
+            }
         }
         catch(Exception error)
         { await Status("Progress is still on this device. "+error.Message); await DisplayAlertAsync("Progress not synced",status,"OK"); }
-        finally
-        {
-            gate.Release();
-            await web.EvaluateJavaScriptAsync("window.setState?.("+JsonSerializer.Serialize(State(),Json)+")");
-        }
 #else
         await Task.CompletedTask;
 #endif

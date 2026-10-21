@@ -4,6 +4,7 @@
   const image=value=>typeof value==='string' && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(value)?value:null;
   const tones=['#35566c','#58456c','#38645c','#73513d','#3b506f','#5e6040'];
   window.setStatus=message=>{ byId('status').textContent=message; byId('library-status').textContent=message; byId('setup-status').textContent=message; };
+  window.setBusy=value=>{ busy=value; buttons(); };
   function buttons() {
     document.querySelectorAll('button,select,#sync-game').forEach(button=>button.disabled=busy);
     byId('drive-connect').disabled=busy || !state?.driveConfigured;
@@ -11,6 +12,9 @@
     byId('upload-game').disabled=busy || !state?.driveConnected || !state?.driveConfigured;
     document.body.classList.toggle('busy',busy);
     byId('setup-status').hidden=!busy;
+    byId('add-game').disabled=busy || !!state?.session;
+    byId('header-back').disabled=false;
+    byId('close-setup').disabled=busy;
   }
   function views() {
     const selected=state?.games.find(game=>game.id===state.selected);
@@ -18,9 +22,18 @@
     byId('selected').hidden=!detail;
     byId('library-browse').hidden=detail;
     document.body.classList.toggle('detail-open',detail);
+    byId('header-back').hidden=!detail;
     byId('library-nav').setAttribute('aria-current','page');
   }
-  function showLibrary() { detailOpen=false; views(); window.scrollTo(0,0); byId('library-nav').focus(); }
+  let libraryScroll=0;
+  function showLibrary() { detailOpen=false; views(); window.scrollTo(0,libraryScroll); byId('library-nav').focus({preventScroll:true}); }
+  window.navigateBack=()=>{
+    if(busy) return true;
+    if(!byId('setup').hidden) { setup(false); return true; }
+    if(detailOpen) { showLibrary(); return true; }
+    if(byId('search').value) { byId('search').value=''; renderGames(); return true; }
+    return false;
+  };
   function setup(open) {
     if(open && byId('setup').hidden) returnFocus=document.activeElement;
     byId('setup').hidden=!open;
@@ -64,7 +77,7 @@
       const label=document.createElement('span'); label.className='game-label'; label.append(title,subtitle);
       button.append(cover,label);
     }
-    button.addEventListener('click',async()=>{ if(await call('select',game.id)) { detailOpen=true; views(); window.scrollTo(0,0); byId('back-library').focus(); } });
+    button.addEventListener('click',async()=>{ libraryScroll=window.scrollY; if(await call('select',game.id)) { detailOpen=true; views(); window.scrollTo(0,0); byId('header-back').focus({preventScroll:true}); } });
     return button;
   }
   function edges(row) {
@@ -134,6 +147,7 @@
     byId('psp-path').textContent=state.pspFolder||'Select the PSP folder used by PPSSPP.';
     byId('emulator-path').textContent=state.emulator||'Not selected';
     byId('emulator-button').textContent=state.platform==='android'?'Detect PPSSPP':'Choose PPSSPP';
+    byId('finish-session').hidden=state.platform!=='android' || !state.session;
     byId('sync-provider').value=drive?'drive':'wifi';
     byId('drive-setup').hidden=!drive;
     byId('phone-pairing').hidden=drive;
@@ -143,7 +157,7 @@
     byId('drive-disconnect').hidden=!state.driveConfigured;
     byId('drive-disconnect').textContent=state.driveConnected?'Disconnect':'Reset connection';
     byId('drive-connect').textContent=state.driveConnected?'Reconnect Google Drive':'Connect Google Drive';
-    byId('play-note').textContent=drive && (!state.driveConnected || !state.driveConfigured)?'Connect Google Drive in Settings before playing with cloud sync.':'Your save is checked before PPSSPP opens. Different progress asks first.';
+    byId('play-note').textContent=state.session?'Exit the game in PPSSPP, then finish syncing here before switching devices.':drive && (!state.driveConnected || !state.driveConfigured)?'Connect Google Drive in Settings before playing with cloud sync.':'Your save is checked before PPSSPP opens. Different progress asks first.';
     byId('sync-caption').textContent=drive?'Google Drive sync':'Wi-Fi sync';
     byId('upload-game').hidden=!drive || !selected || !state.installed.includes(selected.id);
     byId('download-label').textContent=drive?'Download this game from Drive when needed':'Download this game from PC when needed';
@@ -178,8 +192,8 @@
   byId('close-setup').addEventListener('click',()=>setup(false));
   byId('setup').addEventListener('click',event=>{ if(event.target===byId('setup') && !busy) setup(false); });
   document.addEventListener('keydown',event=>{
+    if(event.key==='Escape' && window.navigateBack()) { event.preventDefault(); return; }
     if(byId('setup').hidden) return;
-    if(event.key==='Escape' && !busy) { event.preventDefault(); setup(false); }
     if(event.key==='Tab') {
       const items=Array.from(byId('setup').querySelectorAll('button,input,textarea,select,summary')).filter(item=>!item.disabled && item.getClientRects().length);
       const first=items[0],last=items[items.length-1];
@@ -189,6 +203,7 @@
     }
   });
   byId('back-library').addEventListener('click',showLibrary);
+  byId('header-back').addEventListener('click',()=>window.navigateBack());
   byId('library-nav').addEventListener('click',showLibrary);
   window.addEventListener('resize',()=>document.querySelectorAll('.shelf-row').forEach(edges));
   byId('search').addEventListener('input',()=>{ if(state) renderGames(); });

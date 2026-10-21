@@ -1,27 +1,30 @@
-# EmuSync 1.3.1 — Larger game saves
+# EmuSync 1.4.0 — Add games and return to your library
 
-The per-game save-data limit is raised from 128 MB to **1 GB** for Windows and Android. This allows larger game-data folders to pass the save check before PPSSPP opens. The current launcher-style library and previous sync protections are retained.
+Add your own PSP ISO directly from the library, get PPSSPP from Settings, and return to a simpler phone layout after playing. The 1 GB save limit, Google Drive support, and EmuDeck save-folder fixes are retained.
 
-- Local capture, backup/recovery, Wi-Fi save transfers, Google Drive downloads, and Drive save metadata use the same expanded-data limit.
-- ZIP transfers allow an additional 16 MB for archive overhead, while decompressed data is still limited to 1 GB.
-- Wi-Fi save upload/download and Drive response reads allow up to 15 minutes for larger transfers. Existing connect and metadata request timeouts remain bounded.
-- The 10,000-file protection stays in place and now has a separate error. A size-limit error identifies the file that exceeded the remaining allowance.
+## What's new
 
-## Update both devices
+- **Add game:** select a local uncompressed `.iso`. If needed, choose a games folder. EmuSync stages the file in its cache, reads its title and artwork, copies it to a new filename, verifies the SHA-256 hash and game ID, then adds it to the library. Your source ISO and existing games are not replaced. Selecting a game already in the library selects its existing copy. Adding a game never launches PPSSPP or syncs saves.
+- **Get PPSSPP:** Settings opens the [official Windows download page](https://www.ppsspp.org/download/) or [Android Play Store listing](https://play.google.com/store/apps/details?id=org.ppsspp.ppsspp). Install it, then choose/detect PPSSPP in Settings. Emulator binaries are not bundled or rehosted.
+- **Windows return:** after the launched PPSSPP process exits, EmuSync restores and activates its window before backing up and syncing the save. A session started offline retries its configured sync connection on exit.
+- **Android return:** launches include PPSSPP's documented `--pause-menu-exit` option. After saving, exit from PPSSPP's pause menu and confirm **Game is closed · Sync** in EmuSync. An active session remains available through **Finished playing · Sync save** if a transfer fails, or after EmuSync restarts. Google reconnect stays available for a pending session.
+- **Phone navigation:** the top bar stays visible while scrolling, with a Back button on game details. Android Back closes Settings, returns to the library while preserving its scroll position, clears search, then backgrounds the app at the library root. Settings keeps its heading and Done button visible. Play remains pinned near the bottom.
 
-- **Windows:** close EmuSync and run `EmuSync-Setup-1.3.1-x64.exe` over the current installation. Existing settings, games, saves, and backups are preserved.
-- **Android:** install `EmuSync-Android.apk` over an original-key installation. Version code is **11** and the original signing identity is retained. Do not uninstall or clear app data.
-- **Both devices must use 1.3.1 or newer** to exchange saves above the old 128 MB limit. Older apps will still reject larger data.
-- `SHA256SUMS.txt` contains checksums for both downloads.
+Android does not provide a reliable way to confirm that another app's game has stopped. Returning via Home/Recents is not treated as proof; choose **Still playing** if PPSSPP remains active. PPSSPP versions and device task handling can affect returning to the launcher. EmuSync must remain available to finish syncing; force-stopping apps cannot guarantee an automatic return or background sync. See [PPSSPP's integration guide](https://dev.ppsspp.org/docs/reference/front-end-integration/).
 
-The alternate-key Android APK from `v1.0-preview.1` cannot be updated in place with the original-key APK. Preserve its private data before considering removal.
+## Install or update
+
+- **Windows:** close EmuSync and run `EmuSync-Setup-1.4.0-x64.exe` over the current installation. Settings, games, saves, and backups are preserved.
+- **Android:** install `EmuSync-Android.apk` over an original-key installation. Version code is **12**. Do not uninstall or clear app data.
+- The alternate-key APK from `v1.0-preview.1` cannot be updated in place. Preserve its private data before considering removal.
+- `SHA256SUMS.txt` contains checksums for both downloads. Windows remains unsigned; Android uses the original development key.
 
 ## Validation and limits
 
-A real 129 MB synthetic save is captured, ZIP-encoded, decoded, and verified by hash. Tests also reject a declared file above 1 GB before reading it, distinguish the 10,000-file limit, and reject a forged ZIP whose expanded entry exceeds 1 GB. All 83 standard checks, 84 checks with Windows RedirectionGuard enforced, and the Windows authentication regression passed. Existing save backups, restore/rollback, conflicts, path validation, EmuDeck link handling, authentication, and transfer checks are retained.
+86 standard checks, 87 checks with Windows RedirectionGuard enforced, and the Windows authentication regression passed. Import checks verify ISO metadata, identical copied bytes and SHA-256, rejection of invalid ISO data, and cleanup after rejection. Browser regression checks cover Add game/Get PPSSPP commands, session retry controls, fixed headers, Back navigation, search, modal focus, safe artwork/titles, and layouts from 320 to 1440 pixels. Browser tests use a simulated native bridge.
 
-Save bundles are currently buffered in memory. Larger saves use more RAM, local backup storage, and Google Drive quota; a full 1 GB real-device transfer has not been tested. Naruto Impact's actual save/game-data files and physical S24 Ultra behavior still need verification. No user saves were read, moved, or deleted during these tests.
+Windows and Android Release builds completed. The installer reports 1.4.0. The Android package passed original-certificate, package-identity, version-code 12, and 16 KB alignment checks. Both packages' UI assets match the browser-tested source, and both contain the configured Google OAuth asset. Installation over a live user installation was not tested.
 
-Windows and Android Release builds completed. The installer version is 1.3.1; the Android package passed original-certificate, package-identity, version-code 11, and 16 KB alignment checks. Both packages contain the configured Google OAuth asset. Installing over a live user installation was not tested.
+Physical S24 Ultra behavior, actual PPSSPP exit/foreground behavior on a user's device, and live Google account transfers have not been independently verified. The original 1 GB save-limit checks include a real 129 MB synthetic save; a full 1 GB phone transfer remains untested. No user games or saves were used in these tests.
 
-The Windows installer is unsigned; Android uses the original development signing key. Game ISO limits are unchanged at 8 GB. Automatic app updates and save-state sync are not included.
+Imports need temporary app-cache space plus destination storage, and support uncompressed PSP ISO files up to 8 GB. Saves remain limited to 1 GB per game and 10,000 files; larger save bundles use more RAM and backup storage. Save states, CSO/CHD support, and automatic app updates are not included.

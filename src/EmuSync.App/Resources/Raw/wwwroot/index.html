@@ -12,15 +12,18 @@
 </head>
 <body>
   <header class="topbar">
+    <button id="header-back" class="header-back" type="button" aria-label="Back to library" hidden>←</button>
     <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M10 8h12c4 0 6 5 7 13 .5 4-3 5-5 2l-3-4H11l-3 4c-2 3-5.5 2-5-2C4 13 6 8 10 8Z"/><path d="M8 13v6m-3-3h6m11-2h.1m3 4h.1"/></svg><span>emu<span class="brand-accent">sync</span></span></div>
     <button id="library-nav" class="nav-button" type="button" aria-current="page">Library</button>
     <div class="header-actions"><button id="connection-chip" class="connection-chip" type="button"><span class="connection-dot"></span><span id="connection-name">Same Wi-Fi</span></button><button id="settings" class="settings-button" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-.5 3-2 1.2L3.7 6l-2 3.5L4 11v2l-2.3 1.5 2 3.5 2.8-1.2 2 1.2.5 3h4l.5-3 2-1.2 2.8 1.2 2-3.5L18 13v-2l2.3-1.5-2-3.5-2.8 1.2-2-1.2L13 3Z"/><circle cx="11" cy="12" r="3"/></svg><span>Settings</span></button></div>
   </header>
   <main id="main-content">
     <div id="feedback-slot"><div id="error" role="alert" hidden></div></div>
+    <button id="finish-session" class="session-reminder" data-command="finish-session" type="button" hidden>Finished playing · Sync save</button>
     <section class="library" aria-label="Game library">
       <section id="library-browse">
         <div class="library-heading"><div><p class="eyebrow">PLAYSTATION PORTABLE</p><h1>Your library<span id="game-count">0 games</span></h1></div><label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input id="search" type="search" placeholder="Find a game" aria-label="Search games" autocomplete="off"></label></div>
+        <div class="library-tools"><button id="add-game" data-command="add-game" type="button">＋ Add game</button><span>Choose a PSP ISO from this device</span></div>
         <nav id="games" aria-label="Select a game"></nav>
         <div id="empty" class="empty-state" hidden><span class="empty-icon" aria-hidden="true">＋</span><h2>Your next game starts here.</h2><p>Choose a games folder, or connect your other device to find your PSP games.</p><button id="empty-settings" class="primary" type="button">Set up your library</button></div>
         <div id="no-results" class="empty-state" hidden><h2>No games found</h2><p>Try another title or clear your search.</p><button id="clear-search" type="button">Clear search</button></div>
@@ -65,7 +68,7 @@
       <div id="setup-error-slot"></div>
       <div class="setup-row"><div><strong>Games folder</strong><small id="games-path">Not selected</small></div><button data-command="games-folder" type="button">Choose folder</button></div>
       <div class="setup-row"><div><strong>PSP save folder</strong><small id="psp-path">Contains SAVEDATA. Find it in PPSSPP → Settings → System.</small></div><button data-command="psp-folder" type="button">Choose folder</button></div>
-      <div class="setup-row"><div><strong>PPSSPP</strong><small id="emulator-path">Select the emulator installed on this device.</small></div><button data-command="emulator" id="emulator-button" type="button">Choose PPSSPP</button></div>
+      <div class="setup-row"><div><strong>PPSSPP</strong><small id="emulator-path">Select the emulator installed on this device.</small></div><div class="emulator-actions"><button data-command="get-ppsspp" type="button">Get PPSSPP</button><button data-command="emulator" id="emulator-button" type="button">Choose PPSSPP</button></div></div>
       <div class="setup-row"><div><label for="sync-provider"><strong>Sync using</strong></label><small>Your save is checked when you press Play.</small></div><select id="sync-provider"><option value="wifi">Same Wi-Fi</option><option value="drive">Google Drive</option></select></div>
       <section id="drive-setup" class="provider-setup" hidden><h2>Google Drive</h2><p id="drive-status">Connect the same Google account on both devices.</p><div class="pair-actions"><button id="drive-connect" data-command="drive-connect" type="button">Connect Google Drive</button><button id="drive-disconnect" data-command="drive-disconnect" type="button" hidden>Disconnect</button><button id="drive-help" data-command="drive-setup" type="button" hidden>Setup guide</button></div><p>Saves sync on Play and after you finish. Game uploads are optional. Your PC does not need to stay on.</p></section>
       <section id="host-pairing" class="provider-setup" hidden><h2>Connect other devices</h2><p>Keep this PC app open on the same Wi-Fi. Paste its pairing code into EmuSync on your other device.</p><button data-command="copy-pair" type="button">Copy pairing code</button></section>

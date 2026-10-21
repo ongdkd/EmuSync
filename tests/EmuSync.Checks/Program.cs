@@ -107,6 +107,12 @@ try
     var firstRecord=iso[21*2048];
     Record(21*2048+firstRecord,23,(uint)icon.Length,"ICON0.PNG;1",false); icon.CopyTo(iso,23*2048);
     var illustrated=await IsoReader.Read(new MemoryStream(iso),"test.iso");
+    var importCache=Path.Combine(root,"imports");
+    var staged=await GameImport.Stage(new MemoryStream(iso),importCache);
+    Check(staged.Game.Id==illustrated.Id && (await File.ReadAllBytesAsync(staged.Path)).SequenceEqual(iso) && staged.Hash==Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(iso)),"Imported ISO preserves bytes, game identity and digest");
+    File.Delete(staged.Path);
+    try { await GameImport.Stage(new MemoryStream(new byte[20]),importCache); throw new Exception("Invalid ISO imported"); } catch(InvalidDataException) { checks++; }
+    Check(Directory.GetFiles(importCache).Length==0,"Invalid import leaves no staged game");
     checks+=await DriveChecks.Run(iso,root);
     Check(illustrated.Icon=="data:image/png;base64,"+Convert.ToBase64String(icon),"ISO thumbnail extracted from ICON0.PNG");
     BinaryPrimitives.WriteUInt32BigEndian(iso.AsSpan(23*2048+16),65535);

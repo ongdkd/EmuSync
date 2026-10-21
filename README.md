@@ -6,12 +6,12 @@ This is an independent implementation inspired by [emu-sync/EmuSync](https://git
 
 ## Try the builds
 
-[Download the Windows installer and Android APK](https://github.com/ongdkd/EmuSync/releases/tag/v1.3.1-preview.1). The library now uses a launcher-style layout: shelves with a featured card, box-art covers, a full-width game banner with a Play bar, and a simple two-column phone grid with Play pinned at the bottom. Google account switching and EmuDeck save-folder fixes are retained. Install over the original-key Android app without uninstalling or clearing data. The APK from `v1.0-preview.1` used a different key and cannot be updated in place with the original key; preserve its private data before considering removal. Live Google sync and physical Android testing remain pending. No games, saves, or PPSSPP binaries are included.
+[Download the Windows installer and Android APK](https://github.com/ongdkd/EmuSync/releases/tag/v1.4.0-preview.1). The library now uses a launcher-style layout: shelves with a featured card, box-art covers, a full-width game banner with a Play bar, and a simple two-column phone grid with Play pinned at the bottom. Google account switching and EmuDeck save-folder fixes are retained. Install over the original-key Android app without uninstalling or clearing data. The APK from `v1.0-preview.1` used a different key and cannot be updated in place with the original key; preserve its private data before considering removal. Live Google sync and physical Android testing remain pending. No games, saves, or PPSSPP binaries are included.
 
 - **Windows:** run the downloaded setup executable. It installs or updates for your Windows account, adds a Start menu shortcut, and includes an uninstaller. The installer is unsigned, so Windows may display a warning. The portable build at `dist/Windows/EmuSync.App.exe` also works; keep that entire folder together.
 - **Android:** install `dist/EmuSync-Android.apk` on a 64-bit ARM device running Android 8 or newer. This is a development-signed sideload build, not a Play Store release.
 
-PPSSPP must be installed separately on each device.
+Use **Settings → Get PPSSPP** to open its official Windows downloads or Android Play Store page. Install it, then choose or detect PPSSPP in Settings. PPSSPP is installed separately; EmuSync does not bundle an emulator.
 
 Windows uninstall removes the installed app only. Your selected games/save folders and private app settings/backups are preserved. Close EmuSync and finish any game session before installing an update or uninstalling.
 
@@ -36,14 +36,20 @@ On **Android**, open Settings:
 
 Game names, IDs, thumbnails (`ICON0.PNG`), and available backgrounds (`PIC1.PNG`) are read directly from ISO metadata. Missing artwork uses a text fallback. No artwork service is contacted.
 
+## Adding a game
+
+Click **Add game** in the library, select a PSP `.iso`, and choose a destination games folder if needed. EmuSync reads the title and artwork, copies and verifies the ISO, and adds it without starting PPSSPP or syncing saves. The original file stays untouched, and an existing game ID is selected rather than replaced. Imports need temporary space in the app cache as well as space in the games folder. Game ISOs are limited to 8 GB.
+
+On phones the header stays visible while scrolling. Back closes Settings, returns from a game to the library, clears an active search, then backgrounds the app at the library root. The Settings header and Done button stay visible too.
+
 ## Playing and syncing
 
 - Opening the app or selecting a game does **not** sync saves.
 - Pressing **Play** on Android downloads the game if needed, verifies it, and checks saves against the PC and the last successful sync.
 - Changes made on only one device transfer automatically. Different progress on both devices asks which copy to keep. Missing or suspiciously empty save files pause the operation.
 - Launch waits until sync succeeds or you explicitly choose to play offline. An offline launch keeps progress locally.
-- On Windows, saves are already in the shared PC folder. The launcher backs them up, launches PPSSPP, and keeps them available for Android after exit.
-- On Android, save and exit the game, then return to EmuSync. Confirm **Game is closed · Sync** to upload your progress. Returning to the launcher while PPSSPP is still playing must use **Still playing**.
+- On Windows, EmuSync waits for PPSSPP to exit, restores its window, backs up progress, and syncs to the configured peer. After offline play it retries the connection on exit. Wi-Fi host saves remain available to other devices.
+- On Android, the PPSSPP pause menu uses its exit-to-launcher option. Save and exit, then confirm **Game is closed · Sync** in EmuSync. Android cannot reliably prove another app has closed, so **Still playing** keeps the session open. **Finished playing · Sync save** stays available for retries and after an EmuSync restart. EmuSync must be open to sync; force-stopping either app cannot guarantee an automatic return.
 - Finish syncing on Android before continuing on the PC. Avoid playing the same game simultaneously on multiple devices; conflicts preserve backups but cannot merge game progress.
 
 For a game not installed on Android, the per-game checkbox controls automatic game downloads. If disabled, Play asks before downloading. Games transfer from PC to Android; save progress transfers both ways.

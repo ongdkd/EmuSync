@@ -11,6 +11,7 @@ public sealed class Settings
     public string? Emulator { get; set; }
     public string? PairCode { get; set; }
     public string? Selected { get; set; }
+    public string? PendingSession { get; set; }
     public string SyncProvider { get; set; }="wifi";
     public string? DriveAccountId { get; set; }
     public string? DriveEmail { get; set; }

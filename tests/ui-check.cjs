@@ -20,6 +20,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache
           if(command==='emulator') state.emulator='Test PPSSPP';
           if(command==='select') state.selected=value;
           if(command==='play') state.status='Sync completed before launch';
+          if(command==='finish-session') state.session=null;
           if(command==='sync-provider') state.syncProvider=value;
           if(command==='drive-connect') { state.driveConnected=true; state.driveEmail='test@example.invalid'; }
           if(command==='drive-disconnect') { state.driveConnected=false; state.driveEmail=null; }
@@ -38,7 +39,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache
     await page.locator('[data-command=games-folder]').click();
     await page.locator('[data-command=psp-folder]').click();
     await page.locator('[data-command=emulator]').click();
+    await page.locator('[data-command=get-ppsspp]').click();
+    assert.equal(await page.evaluate(()=>calls.filter(c=>c.command==='get-ppsspp').length),1);
     await page.locator('#close-setup').click();
+    await page.locator('#add-game').click();
+    assert.equal(await page.evaluate(()=>calls.filter(c=>c.command==='add-game').length),1);
     assert.equal(await page.locator('.game img').count(),0,'Game title must not become HTML');
     await page.locator('.game').nth(1).click();
     assert.equal(await page.locator('#game-title').innerText(),'Second Game');
@@ -69,7 +74,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache
     assert(await page.locator('#drive-help').isVisible());
     await page.evaluate(()=>window.setState(window.fixtureState));
     await page.locator('#close-setup').click();
-    await page.locator('#back-library').click();
+    await page.locator('#header-back').click();
     assert.notEqual(await page.evaluate(()=>document.activeElement.id),'search','Returning to the gallery must not open the mobile keyboard');
     await page.locator('#search').fill('Second');
     assert.equal(await page.locator('.game').count(),1,'Search filters the library without native calls');
@@ -90,7 +95,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache
       await page.keyboard.press('Shift+Tab');
       assert(await page.evaluate(()=>document.getElementById('setup').contains(document.activeElement)),'Keyboard focus must stay inside Settings');
       await page.locator('#close-setup').click();
-      await page.locator('#back-library').click();
+      await page.locator('#header-back').click();
       assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`Gallery overflow at ${width}`);
       await page.locator('.game').first().click();
     }
@@ -112,7 +117,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache
       window.setState(window.fixtureState);
     });
     await page.setViewportSize({width:1440,height:1000});
-    await page.locator('#back-library').click();
+    await page.locator('#header-back').click();
     await page.screenshot({path:path.resolve(__dirname,'../dist/ui-library-desktop.png'),fullPage:true});
     await page.locator('.game').first().click();
     assert(await page.locator('#detail-art').isHidden(),'A full banner uses the ISO background without duplicating its icon');
@@ -123,8 +128,29 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache
     assert(playBox.height>=48 && playBox.y+playBox.height<=844,'Mobile Play stays within the viewport with a large touch target');
     assert.equal(await page.getByRole('button',{name:'Settings',exact:true}).count(),1,'Icon-only mobile Settings retains an accessible name');
     await page.screenshot({path:path.resolve(__dirname,'../dist/ui-game-mobile.png'),fullPage:true});
-    await page.locator('#back-library').click();
+    await page.locator('#header-back').click();
     await page.screenshot({path:path.resolve(__dirname,'../dist/ui-library-mobile.png'),fullPage:true});
+    await page.evaluate(()=>window.scrollTo(0,500));
+    assert((await page.locator('.topbar').boundingBox()).y===0,'Mobile header stays visible while the library scrolls');
+    await page.locator('.game').first().click();
+    await page.locator('#settings').click();
+    await page.locator('.settings-panel').evaluate(element=>element.scrollTop=500);
+    const heading=await page.locator('.setup-heading').boundingBox();
+    assert(heading.y>=0 && heading.y<10,'Settings keeps its heading and Done button visible');
+    assert(await page.evaluate(()=>window.navigateBack()),'Device Back closes Settings');
+    assert(await page.locator('#setup').isHidden());
+    assert(await page.locator('#selected').isVisible(),'Closing Settings preserves the selected game');
+    assert(await page.evaluate(()=>window.navigateBack()),'Device Back returns from a game to the library');
+    assert(await page.locator('#library-browse').isVisible());
+    assert.equal(await page.evaluate(()=>window.navigateBack()),false,'At the library root Back can leave the app');
+    await page.evaluate(()=>{ Object.assign(window.fixtureState,{platform:'android',session:window.fixtureState.selected}); window.setState(window.fixtureState); });
+    await page.locator('.game').first().click();
+    assert(await page.locator('#play').isDisabled());
+    assert(await page.locator('#add-game').isDisabled());
+    await page.locator('#finish-session').click();
+    assert.equal(await page.evaluate(()=>calls.filter(c=>c.command==='finish-session').length),1,'Android offers a retry for unfinished session sync');
+    assert(await page.locator('#finish-session').isHidden());
+    assert.deepEqual(errors,[]);
     console.log('PASS: legacy WebView support, safe titles/artwork, gallery/detail navigation, search, sync only on Play, Drive controls, modal error visibility/focus, and mobile layouts.');
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});
