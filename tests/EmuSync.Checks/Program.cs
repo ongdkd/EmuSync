@@ -26,6 +26,7 @@ Directory.CreateDirectory(root);
 try
 {
     checks+=await LinkedSaveChecks.Run(root);
+    checks+=await SaveLimitChecks.Run(root);
     var folder=new LocalFolder(Path.Combine(root,"PSP"));
     await folder.Write("SAVEDATA/ULUS12345/DATA.BIN",new MemoryStream([1,2,3]));
     await folder.Write("SAVEDATA/ULUS99999/DATA.BIN",new MemoryStream([9]));

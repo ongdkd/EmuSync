@@ -51,7 +51,7 @@ If sign-in succeeds but connecting Drive fails, choose **Reset connection** in S
 - Files are stored in an **EmuSync** folder in My Drive. The app only requests access to files it creates/uses, not your entire Drive.
 - Saves are immutable ZIP snapshots with parent links. Simultaneous different uploads preserve both versions and ask which cloud copy to use; local-vs-cloud conflicts ask before replacement. This avoids relying on clocks or silently overwriting a concurrent save.
 - Local backups and recovery records are retained. Drive snapshots are not automatically deleted; they consume quota. The first version stops for attention after 1,000 revisions per game.
-- Save transfers retain the existing 128 MB/10,000-file limits; ISOs are limited to 8 GB. Expanded ZIPs, paths, game IDs, hashes, response sizes, and upload URLs are checked before use.
+- Saves allow up to 1 GB per game and 10,000 files; transfer archives allow 16 MB of extra ZIP overhead. Both devices need 1.3.1 or later for saves above the old 128 MB limit. ISOs remain limited to 8 GB. Expanded ZIPs, paths, game IDs, hashes, response sizes, and upload URLs are checked before use.
 - Uploads use 4 MB resumable chunks. Interrupted uploads currently restart when retried; upload sessions are not persisted across app launches.
 - If two different ISOs have the same PSP game ID, the app pauses cloud game access instead of choosing silently. Keep the intended copy in the Drive folder and remove the duplicate, then Refresh games. Existing local games/saves are retained.
 - Disconnecting revokes Google access and may require reconnecting on other devices. Files remain on Drive. Account and Wi-Fi save baselines are kept separate.

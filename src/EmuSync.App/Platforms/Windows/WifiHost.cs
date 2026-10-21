@@ -61,7 +61,7 @@ public sealed class WifiHost : IAsyncDisposable
         var builder=WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();
         builder.WebHost.ConfigureKestrel(options=> {
-            options.Limits.MaxRequestBodySize=SaveBundle.Limit;
+            options.Limits.MaxRequestBodySize=SaveBundle.ArchiveLimit;
             options.ListenAnyIP(Port,listen=>listen.UseHttps(cert));
         });
         var host=builder.Build();
@@ -107,7 +107,7 @@ public sealed class WifiHost : IAsyncDisposable
         });
         host.MapPut("/api/saves/{id}",async(string id,HttpContext context)=> {
             using var input=new MemoryStream();
-            await SaveBundle.CopyLimited(context.Request.Body,input,SaveBundle.Limit);
+            await SaveBundle.CopyLimited(context.Request.Body,input,SaveBundle.ArchiveLimit);
             var incoming=SaveBundle.FromZip(input.ToArray(),id);
             if(incoming.Info.Hash is null || incoming.Info.Suspicious) throw new InvalidDataException("Empty saves are not accepted.");
             await gate.WaitAsync(context.RequestAborted);

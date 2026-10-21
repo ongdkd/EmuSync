@@ -58,7 +58,7 @@ public sealed partial class DriveClient : ISyncPeer
         RequireObserved(id,hash);
         if(selected is null) throw new IOException("This game has no save on Google Drive.");
         using var response=await client.GetAsync($"drive/v3/files/{selected.Id}?alt=media",HttpCompletionOption.ResponseHeadersRead);
-        var bundle=SaveBundle.FromZip(await Bytes(response,SaveBundle.Limit),id);
+        var bundle=SaveBundle.FromZip(await Bytes(response,SaveBundle.ArchiveLimit),id);
         if(bundle.Info.Hash!=hash || bundle.Info.Files!=selected.Files || bundle.Info.Bytes!=selected.Bytes || bundle.Info.Suspicious!=selected.Suspicious)
             throw new IOException("The Drive save failed verification. Nothing was replaced.");
         return bundle;
@@ -145,7 +145,7 @@ public sealed partial class DriveClient : ISyncPeer
     {
         Ensure(response);
         if(response.Content.Headers.ContentLength>limit) throw new IOException("Drive response exceeds the safety limit.");
-        using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(15));
         await using var input=await response.Content.ReadAsStreamAsync(timeout.Token); using var output=new MemoryStream();
         await SaveBundle.CopyLimited(input,output,limit,timeout.Token); return output.ToArray();
     }

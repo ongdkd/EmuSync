@@ -36,18 +36,18 @@ public sealed class WifiClient : ISyncPeer
     }
     public async Task<SaveBundle> DownloadSave(string id,string hash)
     {
-        using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(15));
         using var request=new HttpRequestMessage(HttpMethod.Get,$"api/saves/{SafePath.GameId(id)}");
         request.Headers.Add("X-Expected-Hash",hash);
         using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,timeout.Token);
         Ensure(response);
-        var bundle=SaveBundle.FromZip(await Bytes(response,SaveBundle.Limit,timeout.Token),id);
+        var bundle=SaveBundle.FromZip(await Bytes(response,SaveBundle.ArchiveLimit,timeout.Token),id);
         if (bundle.Info.Hash!=hash) throw new IOException("The save failed verification. Nothing was replaced.");
         return bundle;
     }
     public async Task UploadSave(string id,SaveBundle bundle,string? expected)
     {
-        using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(15));
         using var request=new HttpRequestMessage(HttpMethod.Put,$"api/saves/{SafePath.GameId(id)}");
         request.Headers.Add("X-Expected-Hash",expected??"none");
         request.Content=new ByteArrayContent(bundle.Zip());

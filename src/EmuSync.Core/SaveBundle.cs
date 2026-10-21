@@ -29,7 +29,9 @@ public sealed class SaveBundle
         if((await Capture(folder,recovery.Id)).Info.Hash!=original.Info.Hash) throw new IOException("Recovery did not verify. Keep the backup folder and do not launch this game yet.");
         File.Delete(journal);
     }
-    public const int Limit = 128 * 1024 * 1024;
+    // shortcut: bundles are buffered in memory; stream save archives before raising this limit further.
+    public const int Limit = 1024 * 1024 * 1024;
+    public const int ArchiveLimit = Limit + 16 * 1024 * 1024;
     public SortedDictionary<string,byte[]> Files { get; } = new(StringComparer.Ordinal);
     public SaveInfo Info
     {
@@ -62,8 +64,10 @@ public sealed class SaveBundle
             {
                 var name = SafePath.Validate(path+"/"+entry.Name);
                 if (entry.IsDirectory) { await Visit(name,depth+1); continue; }
-                if (result.Files.Count >= 10000 || entry.Size > Limit-totalBytes)
-                    throw new InvalidDataException("This save is too large to sync safely (128 MB limit).");
+                if (result.Files.Count >= 10000)
+                    throw new InvalidDataException("This game's save folders contain more than 10,000 files.");
+                if (entry.Size > Limit-totalBytes)
+                    throw new InvalidDataException($"This game's save data exceeds the 1 GB limit at {name}.");
                 await using var input = await folder.Read(name);
                 using var output = new MemoryStream();
                 await CopyLimited(input,output,Limit-totalBytes);
@@ -82,12 +86,13 @@ public sealed class SaveBundle
                 using var stream = zip.CreateEntry(path,CompressionLevel.Fastest).Open();
                 stream.Write(bytes);
             }
+        if(output.Length>ArchiveLimit) throw new InvalidDataException("The save archive exceeds the transfer limit.");
         return output.ToArray();
     }
     public static SaveBundle FromZip(byte[] data,string id)
     {
         SafePath.GameId(id);
-        if (data.Length > Limit) throw new InvalidDataException("Save download exceeds the safety limit.");
+        if (data.Length > ArchiveLimit) throw new InvalidDataException("Save download exceeds the safety limit.");
         using var input = new MemoryStream(data);
         using var zip = new ZipArchive(input,ZipArchiveMode.Read);
         if (zip.Entries.Count > 10000) throw new InvalidDataException("Too many save files.");
