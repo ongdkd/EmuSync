@@ -90,8 +90,8 @@ public sealed class WifiHost : IAsyncDisposable
             try {
                 if(busy()) { context.Response.StatusCode=423; return; }
                 RequireGame(id,games());
-                var bundle=await SaveBundle.Capture(saves,id);
-                await context.Response.WriteAsJsonAsync(new SaveDescriptor(bundle.Info,bundle.Files.Keys.ToArray()));
+                using var bundle=await SaveBundle.Capture(saves,id,token:context.RequestAborted);
+                await context.Response.WriteAsJsonAsync(new SaveDescriptor(bundle.Info,bundle.Paths.ToArray()));
             } finally { gate.Release(); }
         });
         host.MapGet("/api/saves/{id}",async(string id,HttpContext context)=> {
@@ -99,22 +99,20 @@ public sealed class WifiHost : IAsyncDisposable
             try {
                 if(busy()) { context.Response.StatusCode=423; return; }
                 RequireGame(id,games());
-                var bundle=await SaveBundle.Capture(saves,id);
+                using var bundle=await SaveBundle.Capture(saves,id,token:context.RequestAborted);
                 if(bundle.Info.Hash!=context.Request.Headers["X-Expected-Hash"].ToString()) { context.Response.StatusCode=409; return; }
-                var bytes=bundle.Zip(); context.Response.ContentLength=bytes.Length;
-                context.Response.ContentType="application/zip"; await context.Response.Body.WriteAsync(bytes);
+                using var archive=bundle.OpenZip(); context.Response.ContentLength=archive.Length;
+                context.Response.ContentType="application/zip"; await archive.CopyToAsync(context.Response.Body,65536,context.RequestAborted);
             } finally { gate.Release(); }
         });
         host.MapPut("/api/saves/{id}",async(string id,HttpContext context)=> {
-            using var input=new MemoryStream();
-            await SaveBundle.CopyLimited(context.Request.Body,input,SaveBundle.ArchiveLimit);
-            var incoming=SaveBundle.FromZip(input.ToArray(),id);
+            using var incoming=await SaveBundle.FromZip(context.Request.Body,id,length:context.Request.ContentLength,token:context.RequestAborted);
             if(incoming.Info.Hash is null || incoming.Info.Suspicious) throw new InvalidDataException("Empty saves are not accepted.");
             await gate.WaitAsync(context.RequestAborted);
             try {
                 if(busy()) { context.Response.StatusCode=423; return; }
                 RequireGame(id,games());
-                var current=await SaveBundle.Capture(saves,id);
+                using var current=await SaveBundle.Capture(saves,id,token:context.RequestAborted);
                 if((current.Info.Hash??"none")!=context.Request.Headers["X-Expected-Hash"].ToString()) { context.Response.StatusCode=409; return; }
                 await SaveBundle.Apply(saves,id,incoming,Path.Combine(data,"backups"));
                 context.Response.StatusCode=204;

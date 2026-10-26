@@ -12,8 +12,8 @@ static class DriveChecks
         async Task Reject(Func<Task> action,string name) { try { await action(); } catch(IOException) { checks++; return; } throw new Exception(name); }
         var server=new DriveServer();
         DriveClient Client(Func<IReadOnlyList<DriveVersion>,Task<string?>>? choose=null)=>new(new HttpClient(server,false),"Test device",choose??(_=>Task.FromResult<string?>(null)));
-        var first=new SaveBundle(); first.Files["SAVEDATA/ULUS12345/DATA.BIN"]=[1,2,3];
-        var second=new SaveBundle(); second.Files["SAVEDATA/ULUS12345/DATA.BIN"]=[4,5,6];
+        var first=SaveFixtures.Create(new() {{"SAVEDATA/ULUS12345/DATA.BIN",[1,2,3]}});
+        var second=SaveFixtures.Create(new() {{"SAVEDATA/ULUS12345/DATA.BIN",[4,5,6]}});
         using var a=Client(); using var b=Client();
         Check((await a.Account()).Id=="test-account","Drive account identity");
         Check((await a.Describe("ULUS12345")).Info.Hash is null,"Empty Drive is a new save");
@@ -90,7 +90,7 @@ static class DriveChecks
         var server=new DriveServer();
         using var drive=new DriveClient(new HttpClient(server,false),"Cleanup test",versions=>Task.FromResult<string?>(versions[0].Id));
         var copies=new List<string>();
-        SaveBundle Save(byte value,string id="ULUS12345") { var save=new SaveBundle(); save.Files[$"SAVEDATA/{id}/DATA.BIN"]=[value]; return save; }
+        SaveBundle Save(byte value,string id="ULUS12345")=>SaveFixtures.Create(new() {{$"SAVEDATA/{id}/DATA.BIN",[value]}},id);
         var latest=Save(6);
         for(byte i=1;i<=6;i++)
         {
@@ -141,7 +141,7 @@ static class DriveChecks
         foreach(var (id,parent) in new[]{("drive-cycle-0001","drive-cycle-0002"),("drive-cycle-0002","drive-cycle-0001")})
         {
             var metadata=new {appProperties=new {emusync="save-v1",game="ULUS12345",hash=Save(12).Info.Hash},description=JsonSerializer.Serialize(new {parents=new[]{parent},device="Invalid history",files=1,bytes=1,suspicious=false})};
-            server.Items.Add((id,JsonSerializer.SerializeToElement(metadata),Save(12).Zip()));
+            server.Items.Add((id,JsonSerializer.SerializeToElement(metadata),SaveFixtures.Zip(Save(12))));
         }
         deleted=server.Deleted.Count;
         await Reject(()=>drive.CleanupSave("ULUS12345",Save(12).Info.Hash),"Cyclic history accepted for deletion");
@@ -206,7 +206,7 @@ static class DriveChecks
                         appProperties=new {emusync="save-v1",game="ULUS12345",hash=racing.Info.Hash},
                         description=JsonSerializer.Serialize(new {parents=details.RootElement.GetProperty("parents"),device="Other device",files=racing.Info.Files,bytes=racing.Info.Bytes,suspicious=false})
                     };
-                    Items.Add((Id(),JsonSerializer.SerializeToElement(changed),racing.Zip()));
+                    Items.Add((Id(),JsonSerializer.SerializeToElement(changed),SaveFixtures.Zip(racing)));
                 }
                 var id=Id(); Items.Add((id,metadata,bytes)); hideNext=HideNewListing; return Reply(new {id});
             }
@@ -224,9 +224,9 @@ static class DriveChecks
             {
                 RaceOnDownload=null;
                 var metadata=new {appProperties=new {emusync="save-v1",game="ULUS12345",hash=racingDownload.Info.Hash},description=JsonSerializer.Serialize(new {parents=new[]{item.Id},device="Other device",files=racingDownload.Info.Files,bytes=racingDownload.Info.Bytes,suspicious=false})};
-                Items.Add((Id(),JsonSerializer.SerializeToElement(metadata),racingDownload.Zip()));
+                Items.Add((Id(),JsonSerializer.SerializeToElement(metadata),SaveFixtures.Zip(racingDownload)));
             }
-            return new(HttpStatusCode.OK) {Content=new ByteArrayContent(CorruptDownload?new SaveBundle().Zip():item.Zip)};
+            return new(HttpStatusCode.OK) {Content=new ByteArrayContent(CorruptDownload?SaveFixtures.Zip(SaveFixtures.Create([])):item.Zip)};
         }
         string Id()=>"drive-file-"+(++next).ToString("D6");
         static HttpResponseMessage Reply(object value)=>new(HttpStatusCode.OK) {Content=JsonContent.Create(value,options:Json)};

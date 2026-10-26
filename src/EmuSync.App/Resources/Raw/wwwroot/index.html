@@ -47,6 +47,11 @@
           <div class="detail-columns">
             <section class="activity" aria-label="Activity">
               <div class="activity-card">
+                <div id="save-sync" class="save-sync" data-state="unknown">
+                  <div class="save-sync-heading"><strong id="save-phase">Save check on Play</strong><span id="save-percent" hidden></span></div>
+                  <progress id="save-progress" max="100" value="0" aria-label="Save sync progress" hidden></progress>
+                  <small id="save-last">Last successful sync: Not yet</small>
+                </div>
                 <div class="play-feedback"><span class="status-dot" aria-hidden="true"></span><span id="status" role="status" aria-live="polite">Save check on Play</span></div>
                 <p id="play-note">Press Play to sync your save, then open PPSSPP.</p>
               </div>

@@ -27,6 +27,7 @@ public sealed class LibraryPage : ContentPage
     {
         BackgroundColor=Color.FromArgb("#171D25");
         settings=Settings.Load();
+        foreach(var key in settings.SaveStatus.Keys.ToArray()) settings.SaveStatus[key]=settings.SaveStatus[key].AfterRestart();
 #if ANDROID
         session=settings.PendingSession;
 #endif
@@ -126,7 +127,11 @@ public sealed class LibraryPage : ContentPage
         }
         catch(Exception error)
         {
-            if(command=="play") session=null;
+            if(command=="play")
+            {
+                session=null;
+                if(System.Text.RegularExpressions.Regex.IsMatch(value,"^[A-Z]{4}[0-9]{5}$")) { await ReportSave(value,"error","Save not synced · "+error.Message); await settings.Save(); }
+            }
             status=error.Message;
             return JsonSerializer.Serialize(new {state=State(),error=error.Message},Json);
         }
@@ -161,6 +166,7 @@ public sealed class LibraryPage : ContentPage
         return new {
             platform=DeviceInfo.Platform==DevicePlatform.WinUI?"windows":"android",games,settings.Selected,
             installed=local.Keys.ToArray(),settings.SyncGames,status,warnings=warnings.ToArray(),
+            syncStates=games.ToDictionary(g=>g.Id,g=>SaveStatus(g.Id)),
             gamesFolder=settings.GamesFolder,pspFolder=settings.PspFolder,emulator=settings.Emulator,
             paired=settings.PairCode is not null,session,backups=Path.Combine(FileSystem.AppDataDirectory,"backups"),
             syncProvider=settings.SyncProvider,driveConfigured,driveConnected=settings.DriveAccountId is not null,driveEmail=settings.DriveEmail
@@ -261,6 +267,7 @@ public sealed class LibraryPage : ContentPage
         catch(Exception e) when(e is HttpRequestException or TaskCanceledException)
         {
             if(!local.ContainsKey(id)) throw new IOException($"{(Drive?"Google Drive":"The main PC")} is unavailable and this game is not downloaded. Check the connection and try again.",e);
+            await ReportSave(id,"pending","No connection · Latest save could not be checked"); await settings.Save();
             if(!await DisplayAlertAsync("Play offline?",$"{(Drive?"Google Drive":"The main PC")} could not be reached. Your latest save cannot be checked. You can use your local save and sync it later.","Play offline","Cancel")) return;
             offline=true;
         }
@@ -269,16 +276,19 @@ public sealed class LibraryPage : ContentPage
         else
         {
         if(host is null) await StartHost();
+        await ReportSave(id,"syncing","Backing up your save before play…");
         if(!await host!.PreparePlay(async()=> {
             if(DeviceFiles.EmulatorRunning()) throw new IOException("Close PPSSPP before syncing.");
-            var snapshot=await SaveBundle.Capture(saves,id);
+            using var snapshot=await SaveBundle.Capture(saves,id,SaveProgress(id));
             if(snapshot.Info.Suspicious && !await DisplayAlertAsync("Save needs attention","Some save files are empty. A backup will be kept. Continue with this local save?","Continue","Cancel")) return false;
             await Backup(id,snapshot); session=id; return true;
-        })) return;
+        })) { await ReportSave(id,"pending","Save check paused · Nothing was replaced"); await settings.Save(); return; }
         }
 #endif
         await settings.Save();
         session=id;
+        await ReportSave(id,"playing",offline?"Playing offline · Sync needed after exit":"Playing in PPSSPP · Save sync after exit");
+        await settings.Save();
 #if ANDROID
         leftForGame=false;
         settings.PendingSession=id;
@@ -298,18 +308,20 @@ public sealed class LibraryPage : ContentPage
 #if WINDOWS
         DeviceFiles.ShowApp();
         session=null;
-        await Backup(id,await SaveBundle.Capture(saves,id));
+        await ReportSave(id,"syncing","Backing up your progress…");
+        SaveInfo finishedInfo;
+        using(var finished=await SaveBundle.Capture(saves,id,SaveProgress(id))) { finishedInfo=finished.Info; await Backup(id,finished); }
         if(client)
         {
             try
             {
                 using var peer=await Peer();
-                if(await Sync(id,peer,saves)) await Status($"Session finished · Your progress is synced to {(Drive?"Google Drive":"the main PC")}.");
+                if(await Sync(id,peer,saves,true)) await Status($"Session finished · Your progress is synced to {(Drive?"Google Drive":"the main PC")}.");
             }
             catch(Exception e) when(e is IOException or HttpRequestException or TaskCanceledException)
-            { await Status("Progress is still on this PC. "+e.Message); }
+            { await ReportSave(id,"pending","Progress is still on this PC · Sync needed. "+e.Message); await settings.Save(); await Status("Progress is still on this PC. "+e.Message); }
         }
-        else await Status(client?"Session finished · Progress has not synced.":"Session finished · Your saves are available to your other devices.");
+        else { await ReportSave(id,finishedInfo.Hash is null?"empty":"shared",finishedInfo.Hash is null?"No save files found · Save in-game first":"Saved on this PC · Available over Wi-Fi"); await settings.Save(); await Status("Session finished · Your saves are available to your other devices."); }
 #else
         await Status("Playing in PPSSPP · Return here when you finish.");
 #endif
@@ -397,62 +409,93 @@ public sealed class LibraryPage : ContentPage
         }
         catch { drive.Dispose(); throw; }
     }
-    async Task<bool> Sync(string id,ISyncPeer peer,IGameFolder saves)
+    string SyncKey(string id)=>Drive?$"drive:{settings.DriveAccountId}:{id}":id;
+    SaveSyncStatus SaveStatus(string id)=>settings.SaveStatus.GetValueOrDefault(SyncKey(id))??new();
+    async Task ReportSave(string id,string phase,string message)
     {
-        // Reading the device save and asking the PC about its copy are independent, so do both at once.
-        var capture=Task.Run(()=>SaveBundle.Capture(saves,id));
-        var describe=peer.Describe(id);
-        await Task.WhenAll(capture,describe);
-        var localSave=await capture;
-        var remote=await describe;
-        var baselineKey=Drive?$"drive:{settings.DriveAccountId}:{id}":id;
-        var baseline=settings.Baselines.GetValueOrDefault(baselineKey);
-        var branches=peer is DriveClient {HasBranches:true};
-        var missing=baseline?.Paths.Except(localSave.Files.Keys).Any()==true;
-        var action=SyncPlan.Decide(localSave.Info.Hash,remote.Info.Hash,baseline?.Hash,localSave.Info.Suspicious||missing||remote.Info.Suspicious||branches);
-        var remoteChoice=Drive?"Use Google Drive save":"Use PC save";
-        if(action is SyncAction.Conflict or SyncAction.Suspicious)
-        {
-            var choices=new List<string>();
-            if(localSave.Info.Hash is not null && !localSave.Info.Suspicious && !missing) choices.Add("Use this device's save");
-            if(remote.Info.Hash is not null && !remote.Info.Suspicious) choices.Add(remoteChoice);
-            if(choices.Count==0) throw new IOException("These saves look incomplete. Sync is paused. Check your PSP folder and restore a backup before trying again.");
-            var choice=await DisplayActionSheetAsync(action==SyncAction.Conflict?"Both devices have different progress. Which save should be used? Both copies will be backed up.":"A save is missing or looks incomplete. Choose a safe copy to continue. Backups will be kept.","Cancel",null,choices.ToArray());
-            if(choice=="Cancel" || choice is null) { await Status("Sync paused · Nothing was replaced."); return false; }
-            action=choice==remoteChoice?SyncAction.Download:SyncAction.Upload;
-        }
-        if(action==SyncAction.Upload)
-        {
-            await Status(Drive?"Sending your save to Google Drive…":"Sending your save to PC…");
-            await Backup(id,localSave);
-            await peer.UploadSave(id,localSave,remote.Info.Hash);
-        }
-        else if(action==SyncAction.Download)
-        {
-            if(remote.Info.Hash is not null)
-            {
-                await Status("Getting your latest save…");
-                var bundle=await peer.DownloadSave(id,remote.Info.Hash);
-                await Backup(id,bundle);
-                await SaveBundle.Apply(saves,id,bundle,Path.Combine(FileSystem.AppDataDirectory,"backups"));
-                localSave=bundle;
-            }
-        }
-        if(branches && action!=SyncAction.Upload) await peer.UploadSave(id,localSave,remote.Info.Hash);
-        settings.Baselines[baselineKey]=new(localSave.Info.Hash,localSave.Files.Keys.ToArray());
+        var match=System.Text.RegularExpressions.Regex.Match(message,@"(\d{1,3})%$");
+        var value=SaveStatus(id).Change(phase,message,match.Success?int.Parse(match.Groups[1].Value):null);
+        settings.SaveStatus[SyncKey(id)]=value;
+        try { await web.EvaluateJavaScriptAsync("window.setGameSync?.("+JsonSerializer.Serialize(id)+","+JsonSerializer.Serialize(value,Json)+")"); }
+        catch(InvalidOperationException) { }
+    }
+    Action<string> SaveProgress(string id)=>message=>MainThread.BeginInvokeOnMainThread(async()=> {
+        if(SaveStatus(id).State=="syncing") await ReportSave(id,"syncing",message);
+    });
+    async Task<bool> Sync(string id,ISyncPeer peer,IGameFolder saves,bool finished=false)
+    {
+        await ReportSave(id,"syncing","Checking your save…");
         await settings.Save();
-        if(peer is DriveClient drive)
+        var progress=SaveProgress(id);
+        var capture=Task.Run(()=>SaveBundle.Capture(saves,id,progress));
+        var describe=peer.Describe(id);
+        SaveBundle? downloaded=null;
+        try
         {
-            try { await drive.CleanupSave(id,localSave.Info.Hash); }
-            catch(Exception error) when(error is IOException or InvalidDataException or JsonException or HttpRequestException or TaskCanceledException)
-            { warnings.Add("Save synced, but old Drive backups could not be cleaned up. Cleanup will retry after the next successful sync. "+error.Message); }
+            await Task.WhenAll(capture,describe);
+            var localSave=await capture;
+            var remote=await describe;
+            var baselineKey=SyncKey(id);
+            var baseline=settings.Baselines.GetValueOrDefault(baselineKey);
+            var branches=peer is DriveClient {HasBranches:true};
+            var missing=baseline?.Paths.Except(localSave.Paths).Any()==true;
+            var action=SyncPlan.Decide(localSave.Info.Hash,remote.Info.Hash,baseline?.Hash,localSave.Info.Suspicious||missing||remote.Info.Suspicious||branches);
+            var remoteChoice=Drive?"Use Google Drive save":"Use PC save";
+            if(action is SyncAction.Conflict or SyncAction.Suspicious)
+            {
+                await ReportSave(id,"syncing","Different progress · Choose a save to continue");
+                var choices=new List<string>();
+                if(localSave.Info.Hash is not null && !localSave.Info.Suspicious && !missing) choices.Add("Use this device's save");
+                if(remote.Info.Hash is not null && !remote.Info.Suspicious) choices.Add(remoteChoice);
+                if(choices.Count==0) throw new IOException("These saves look incomplete. Sync is paused. Check your PSP folder and restore a backup before trying again.");
+                var choice=await DisplayActionSheetAsync(action==SyncAction.Conflict?"Both devices have different progress. Which save should be used? Both copies will be backed up.":"A save is missing or looks incomplete. Choose a safe copy to continue. Backups will be kept.","Cancel",null,choices.ToArray());
+                if(choice=="Cancel" || choice is null)
+                {
+                    await ReportSave(id,"pending","Sync paused · Nothing was replaced."); await settings.Save();
+                    await Status("Sync paused · Nothing was replaced."); return false;
+                }
+                action=choice==remoteChoice?SyncAction.Download:SyncAction.Upload;
+            }
+            if(action==SyncAction.Upload)
+            {
+                await ReportSave(id,"syncing",Drive?"Uploading save to Google Drive…":"Uploading save to PC…");
+                await Status(Drive?"Sending your save to Google Drive…":"Sending your save to PC…");
+                await Backup(id,localSave);
+                await peer.UploadSave(id,localSave,remote.Info.Hash,progress);
+            }
+            else if(action==SyncAction.Download && remote.Info.Hash is not null)
+            {
+                await ReportSave(id,"syncing","Downloading your latest save…");
+                await Status("Getting your latest save…");
+                downloaded=await peer.DownloadSave(id,remote.Info.Hash,progress);
+                await Backup(id,downloaded);
+                await SaveBundle.Apply(saves,id,downloaded,Path.Combine(FileSystem.AppDataDirectory,"backups"),progress);
+                localSave=downloaded;
+            }
+            if(branches && action!=SyncAction.Upload) await peer.UploadSave(id,localSave,remote.Info.Hash,progress);
+            settings.Baselines[baselineKey]=new(localSave.Info.Hash,localSave.Paths.ToArray());
+            await settings.Save();
+            if(peer is DriveClient drive)
+            {
+                await ReportSave(id,"syncing","Verifying cloud backups…");
+                try { await drive.CleanupSave(id,localSave.Info.Hash); }
+                catch(Exception error) when(error is IOException or InvalidDataException or JsonException or HttpRequestException or TaskCanceledException)
+                { warnings.Add("Save synced, but old Drive backups could not be cleaned up. Cleanup will retry after the next successful sync. "+error.Message); }
+            }
+            await ReportSave(id,localSave.Info.Hash is null?"empty":finished?"synced":"checked",localSave.Info.Hash is null?"No save files found · Save in-game first":finished?"Safe to switch devices":"Save checked · Ready to play");
+            await settings.Save();
+            return true;
         }
-        return true;
+        catch(Exception error)
+        {
+            await ReportSave(id,"error","Save not synced · "+error.Message); await settings.Save(); throw;
+        }
+        finally { if(capture.IsCompletedSuccessfully) capture.Result.Dispose(); downloaded?.Dispose(); }
     }
     static async Task Backup(string id,SaveBundle bundle)
     {
-        var directory=Path.Combine(FileSystem.AppDataDirectory,"backups"); Directory.CreateDirectory(directory);
-        await File.WriteAllBytesAsync(Path.Combine(directory,$"{id}-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.zip"),bundle.Zip());
+        var directory=Path.Combine(FileSystem.AppDataDirectory,"backups");
+        await bundle.Backup(directory,$"{id}-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.zip");
     }
     async Task Status(string message)
     {
@@ -495,14 +538,14 @@ public sealed class LibraryPage : ContentPage
             var id=SafePath.GameId(session);
             if(settings.PspFolder is null) return;
             using var peer=await Peer();
-            if(await Sync(id,peer,OpenSaves(settings.PspFolder)))
+            if(await Sync(id,peer,OpenSaves(settings.PspFolder),true))
             {
                 settings.PendingSession=null; await settings.Save(); session=null;
                 await Status($"Your progress is synced to {(Drive?"Google Drive":"PC")}.");
             }
         }
         catch(Exception error)
-        { await Status("Progress is still on this device. "+error.Message); await DisplayAlertAsync("Progress not synced",status,"OK"); }
+        { if(session is not null) { await ReportSave(session,"pending","Progress is still on this device · Sync needed. "+error.Message); await settings.Save(); } await Status("Progress is still on this device. "+error.Message); await DisplayAlertAsync("Progress not synced",status,"OK"); }
 #else
         await Task.CompletedTask;
 #endif

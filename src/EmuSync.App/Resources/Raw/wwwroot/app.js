@@ -3,6 +3,28 @@
   let state=null,busy=false,detailOpen=false,returnFocus=null;
   const image=value=>typeof value==='string' && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(value)?value:null;
   const tones=['#35566c','#58456c','#38645c','#73513d','#3b506f','#5e6040'];
+  const syncLabels={unknown:'Save check on Play',empty:'No save yet',syncing:'Syncing save',checked:'Ready to play',playing:'Playing · Sync after exit',pending:'Sync needed',error:'Sync needed',synced:'Safe to switch devices',shared:'Saved on this PC'};
+  function renderSync() {
+    const value=state?.syncStates?.[state.selected]||{state:'unknown'};
+    byId('save-sync').dataset.state=value.state;
+    byId('save-phase').textContent=syncLabels[value.state]||syncLabels.unknown;
+    const percent=value.state==='syncing' && Number.isFinite(value.percent)?Math.max(0,Math.min(100,value.percent)):null;
+    byId('save-progress').hidden=value.state!=='syncing';
+    if(percent===null) byId('save-progress').removeAttribute('value'); else byId('save-progress').value=percent;
+    byId('save-percent').hidden=percent===null;
+    byId('save-percent').textContent=percent===null?'':percent+'%';
+    const date=value.lastSynced?new Date(value.lastSynced):null;
+    byId('save-last').textContent='Last successful sync: '+(date && !Number.isNaN(date.getTime())?date.toLocaleString():'Not yet');
+    if(value.message && value.state!=='unknown') byId('status').textContent=value.message;
+  }
+  window.setGameSync=(id,value)=>{
+    if(!state) return;
+    if(!state.syncStates) state.syncStates={};
+    const previous=state.syncStates[id]?.state;
+    state.syncStates[id]=value;
+    if(previous!==value.state) renderGames();
+    if(id===state.selected) renderSync();
+  };
   window.setStatus=message=>{ byId('status').textContent=message; byId('library-status').textContent=message; byId('setup-status').textContent=message; };
   window.setBusy=value=>{ busy=value; buttons(); };
   function buttons() {
@@ -63,18 +85,21 @@
     const button=document.createElement('button'); button.type='button'; button.className='game'+(feature?' feature':'')+(installed?' installed':'');
     button.setAttribute('aria-pressed',String(game.id===state.selected));
     const title=document.createElement('strong'),subtitle=document.createElement('small');
+    const save=state.syncStates?.[game.id];
+    const badge=document.createElement('small'); badge.className='save-badge';
+    if(save && save.state!=='unknown') { badge.textContent=syncLabels[save.state]||'Sync needed'; badge.dataset.state=save.state; }
     title.textContent=game.title; subtitle.textContent=installed?'On this device':state.syncProvider==='drive'?'Download from Drive':'Download from PC';
     if(feature) {
       const panel=document.createElement('span'); panel.className='feature-panel';
       const icon=document.createElement('span'); icon.className='feature-icon'; icon.textContent=installed?'\▶':'\↓'; icon.setAttribute('aria-hidden','true');
       const text=document.createElement('span'); text.className='feature-text';
-      text.append(title,subtitle); panel.append(icon,text);
+      text.append(title,subtitle,badge); panel.append(icon,text);
       button.append(artwork(game,'feature-art'),panel);
     } else {
       const cover=artwork(game,'cover');
       const tag=document.createElement('span'); tag.className='cover-console'; tag.textContent='PSP'; tag.setAttribute('aria-hidden','true'); cover.prepend(tag);
       if(!installed) { const download=document.createElement('span'); download.className='cover-download'; download.textContent='\↓'; download.setAttribute('aria-hidden','true'); cover.append(download); }
-      const label=document.createElement('span'); label.className='game-label'; label.append(title,subtitle);
+      const label=document.createElement('span'); label.className='game-label'; label.append(title,subtitle,badge);
       button.append(cover,label);
     }
     button.addEventListener('click',async()=>{ libraryScroll=window.scrollY; if(await call('select',game.id)) { detailOpen=true; views(); window.scrollTo(0,0); byId('header-back').focus({preventScroll:true}); } });
@@ -170,7 +195,7 @@
     byId('connection').textContent=drive?'Google Drive · Finish syncing before switching devices':state.platform==='windows'?'Same Wi-Fi · Keep EmuSync open for your other devices':'Same Wi-Fi · Connect to the same network as your PC';
     byId('connection-name').textContent=drive?(state.driveConnected?'Drive connected':'Connect Drive'):'Same Wi-Fi';
     byId('connection-chip').classList.toggle('connected',drive && !!state.driveConnected);
-    window.setStatus(state.status); views(); buttons();
+    window.setStatus(state.status); renderSync(); views(); buttons();
   };
   async function call(command,value='') {
     if(busy) return false;

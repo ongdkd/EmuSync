@@ -7,8 +7,8 @@ public interface ISyncPeer : IDisposable
     Task<List<Game>> Games();
     Task<(string Path,string Hash)> DownloadGame(Game game,string cache,Action<string> progress);
     Task<SaveDescriptor> Describe(string id);
-    Task<SaveBundle> DownloadSave(string id,string hash);
-    Task UploadSave(string id,SaveBundle bundle,string? expected);
+    Task<SaveBundle> DownloadSave(string id,string hash,Action<string>? progress=null);
+    Task UploadSave(string id,SaveBundle bundle,string? expected,Action<string>? progress=null);
 }
 public interface IGameFolder
 {

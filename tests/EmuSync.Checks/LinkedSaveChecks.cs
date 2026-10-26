@@ -27,17 +27,15 @@ static class LinkedSaveChecks
             try { await File.ReadAllBytesAsync(Path.Combine(link,"ULUS12345","DATA.BIN")); throw new Exception("The guarded fixture must reject raw junction traversal."); }
             catch(IOException error) when((error.HResult&0xffff)==448) { checks++; }
         }
-        await Reject(()=>SaveBundle.Capture(new LocalFolder(psp),"ULUS12345"),"Generic/game folders must still block linked children");
+        await Reject(()=>SaveFixtures.Capture(new LocalFolder(psp),"ULUS12345"),"Generic/game folders must still block linked children");
         var saves=new LocalFolder(psp,allowSaveDataLink:true);
         Check((await saves.List()).Any(e=>e.Name=="SAVEDATA" && e.IsDirectory),"PSP picker recognizes the mapped SAVEDATA folder");
-        var original=await SaveBundle.Capture(saves,"ULUS12345");
-        Check(original.Files["SAVEDATA/ULUS12345/DATA.BIN"].SequenceEqual(new byte[]{1,2,3}),"EmuDeck capture reads the real save target");
-        var update=SaveBundle.FromZip(original.Zip(),"ULUS12345");
-        update.Files["SAVEDATA/ULUS12345/DATA.BIN"]=[4,5,6];
-        update.Files["SAVEDATA/ULUS12345/NEW.BIN"]=[8];
+        var original=await SaveFixtures.Capture(saves,"ULUS12345");
+        Check(SaveFixtures.Read(original,"SAVEDATA/ULUS12345/DATA.BIN").SequenceEqual(new byte[]{1,2,3}),"EmuDeck capture reads the real save target");
+        var update=SaveFixtures.With(original,("SAVEDATA/ULUS12345/DATA.BIN",[4,5,6]),("SAVEDATA/ULUS12345/NEW.BIN",[8]));
         await SaveBundle.Apply(saves,"ULUS12345",update,Path.Combine(fixture,"backups"));
         Check((await File.ReadAllBytesAsync(Path.Combine(actual,"ULUS12345","DATA.BIN"))).SequenceEqual(new byte[]{4,5,6}),"EmuDeck apply writes the actual save target");
-        Check((await SaveBundle.Capture(saves,"ULUS12345")).Info.Hash==update.Info.Hash,"Linked save apply verifies identical portable bundle paths");
+        Check((await SaveFixtures.Capture(saves,"ULUS12345")).Info.Hash==update.Info.Hash,"Linked save apply verifies identical portable bundle paths");
         await SaveBundle.Apply(saves,"ULUS12345",original,Path.Combine(fixture,"backups"));
         Check(!File.Exists(Path.Combine(actual,"ULUS12345","NEW.BIN")),"Linked save restore deletes only replaced game files");
         Check((await File.ReadAllBytesAsync(Path.Combine(actual,"ULUS99999","DATA.BIN")))[0]==9,"Other game progress stays intact");
@@ -45,7 +43,7 @@ static class LinkedSaveChecks
         Link(nested,elsewhere);
         try
         {
-            await Reject(()=>SaveBundle.Capture(saves,"ULUS12345"),"Nested links must stop capture rather than silently omit files");
+            await Reject(()=>SaveFixtures.Capture(saves,"ULUS12345"),"Nested links must stop capture rather than silently omit files");
             await Reject(()=>saves.Read("SAVEDATA/ULUS12345/ESCAPE/sentinel.bin"),"Nested link read escaped the save root");
             await Reject(()=>saves.Write("SAVEDATA/ULUS12345/ESCAPE/sentinel.bin",new MemoryStream([0])),"Nested link write escaped the save root");
             await Reject(()=>saves.Delete("SAVEDATA/ULUS12345/ESCAPE/sentinel.bin"),"Nested link delete escaped the save root");

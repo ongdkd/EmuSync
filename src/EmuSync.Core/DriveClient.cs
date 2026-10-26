@@ -53,20 +53,23 @@ public sealed partial class DriveClient : ISyncPeer
         else selected=observed[0];
         return new(new(selected.Hash,selected.Files,selected.Bytes,selected.Suspicious),[]);
     }
-    public async Task<SaveBundle> DownloadSave(string id,string hash)
+    public async Task<SaveBundle> DownloadSave(string id,string hash,Action<string>? progress=null)
     {
         RequireObserved(id,hash);
         if(selected is null) throw new IOException("This game has no save on Google Drive.");
         using var response=await client.GetAsync($"drive/v3/files/{selected.Id}?alt=media",HttpCompletionOption.ResponseHeadersRead);
-        var bundle=SaveBundle.FromZip(await Bytes(response,SaveBundle.ArchiveLimit),id);
+        Ensure(response);
+        using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(15));
+        await using var input=await response.Content.ReadAsStreamAsync(timeout.Token);
+        var bundle=await SaveBundle.FromZip(input,id,progress,response.Content.Headers.ContentLength,timeout.Token);
         if(bundle.Info.Hash!=hash || bundle.Info.Files!=selected.Files || bundle.Info.Bytes!=selected.Bytes || bundle.Info.Suspicious!=selected.Suspicious)
-            throw new IOException("The Drive save failed verification. Nothing was replaced.");
+        { bundle.Dispose(); throw new IOException("The Drive save failed verification. Nothing was replaced."); }
         return bundle;
     }
-    public async Task UploadSave(string id,SaveBundle bundle,string? expected)
+    public async Task UploadSave(string id,SaveBundle bundle,string? expected,Action<string>? progress=null)
     {
         RequireObserved(id,expected);
-        bundle=SaveBundle.FromZip(bundle.Zip(),id);
+        if(bundle.Id!=id) throw new InvalidDataException("The save belongs to another game.");
         var info=bundle.Info;
         if(info.Hash is null || info.Suspicious) throw new IOException("An empty or incomplete save will not be uploaded to Drive.");
         var heads=Heads(await List(id));
@@ -77,8 +80,8 @@ public sealed partial class DriveClient : ISyncPeer
             appProperties=new {emusync="save-v1",game=id,hash=info.Hash},
             description=JsonSerializer.Serialize(new Details(observed!.Select(v=>v.Id).ToArray(),device,info.Files,info.Bytes,info.Suspicious),Json)
         };
-        using var data=new MemoryStream(bundle.Zip());
-        var createdId=await Upload(metadata,data,data.Length,_=>{});
+        using var data=bundle.OpenZip();
+        var createdId=await Upload(metadata,data,data.Length,progress??(_=>{}));
         var listed=await List(id);
         // Drive search may lag behind the confirmed upload; include the acknowledged snapshot before finding heads.
         if(!listed.Any(v=>v.Id==createdId)) listed.Add(new(createdId,info.Hash,observed!.Select(v=>v.Id).ToArray(),device,DateTimeOffset.UtcNow,info.Files,info.Bytes,info.Suspicious));
@@ -96,7 +99,8 @@ public sealed partial class DriveClient : ISyncPeer
         if(versions.Count<=3 || !SameHeads(heads,observed!) || heads.Any(v=>v.Hash!=expected || v.Suspicious)) return;
         if(heads.Count>1)
         {
-            await UploadSave(id,await DownloadSave(id,expected),expected);
+            using var joined=await DownloadSave(id,expected);
+            await UploadSave(id,joined,expected);
             versions=await List(id); heads=Heads(versions);
             if(heads.Count!=1 || !SameHeads(heads,observed!)) return;
         }
@@ -110,7 +114,7 @@ public sealed partial class DriveClient : ISyncPeer
             if(next is null) throw new IOException("Drive history is inconsistent. Backup cleanup was skipped.");
             ordered.Add(next); remaining.Remove(next.Id);
         }
-        await DownloadSave(id,expected);
+        using var verified=await DownloadSave(id,expected);
         if(!SameHeads(Heads(await List(id)),heads)) return;
         foreach(var old in ordered.Take(ordered.Count-3))
         {

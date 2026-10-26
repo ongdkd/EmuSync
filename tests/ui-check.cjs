@@ -150,6 +150,23 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Guroc/.cache
     await page.locator('#finish-session').click();
     assert.equal(await page.evaluate(()=>calls.filter(c=>c.command==='finish-session').length),1,'Android offers a retry for unfinished session sync');
     assert(await page.locator('#finish-session').isHidden());
+    await page.evaluate(()=>window.setGameSync(window.fixtureState.selected,{state:'syncing',message:'Uploading save · 37%',percent:37,lastSynced:'2026-10-25T12:00:00Z'}));
+    assert.equal(await page.locator('#save-progress').getAttribute('value'),'37');
+    assert.equal(await page.locator('#save-phase').innerText(),'Syncing save');
+    assert((await page.locator('#save-last').innerText()).includes('2026'),'Last successful sync survives an in-progress transfer');
+    await page.evaluate(()=>window.setGameSync(window.fixtureState.selected,{state:'playing',message:'Playing · Sync after exit',lastSynced:'2026-10-25T12:00:00Z'}));
+    assert(await page.locator('#save-progress').isHidden());
+    assert.equal(await page.locator('#save-phase').innerText(),'Playing · Sync after exit');
+    await page.evaluate(()=>window.setGameSync(window.fixtureState.selected,{state:'synced',message:'Safe to switch devices',lastSynced:'2026-10-26T12:00:00Z'}));
+    assert.equal(await page.locator('#save-phase').innerText(),'Safe to switch devices');
+    await page.locator('#header-back').click();
+    assert((await page.locator('.save-badge').allTextContents()).includes('Safe to switch devices'),'Library cards reflect per-game sync state');
+    await page.locator('.game').first().click();
+    await page.evaluate(()=>window.setGameSync(window.fixtureState.selected,{state:'pending',message:'Offline · Progress is still on this device',lastSynced:'2026-10-26T12:00:00Z'}));
+    assert.equal(await page.locator('#save-phase').innerText(),'Sync needed');
+    await page.evaluate(()=>window.setGameSync(window.fixtureState.games[1].id,{state:'synced',message:'Safe to switch devices'}));
+    assert.equal(await page.locator('#save-phase').innerText(),'Sync needed','A different game finishing must not change the selected game status');
+    await page.screenshot({path:path.resolve(__dirname,'../dist/ui-sync-mobile.png'),fullPage:true});
     assert.deepEqual(errors,[]);
     console.log('PASS: legacy WebView support, safe titles/artwork, gallery/detail navigation, search, sync only on Play, Drive controls, modal error visibility/focus, and mobile layouts.');
   } finally { await browser.close(); }

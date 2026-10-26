@@ -40,6 +40,8 @@ Testing-mode Google grants may expire and require reconnecting. Broader distribu
 4. For each ISO you want available remotely, select it, open **Game settings**, and choose **Upload game to Drive**. Uploads are optional. Missing games download on Play; disabling automatic downloads asks first.
 5. Press **Play** to check and sync saves before PPSSPP opens. Windows syncs after PPSSPP exits. On Android, exit PPSSPP, return to EmuSync, and confirm **Game is closed · Sync**.
 
+Game details show save progress and the last successful sync time. A pre-launch check shows **Ready to play**; the running game remains **Playing · Sync after exit**. A completed post-game sync shows **Safe to switch devices**. Failures and offline sessions keep the last successful time but show **Sync needed**.
+
 The PC can be off when Android syncs through Drive. You need internet, enough Drive quota, and enough local storage for the ISO download/cache and destination copy. Remote ISO artwork appears after the game is downloaded and its metadata is read locally.
 
 ## Save protection and limits
@@ -52,6 +54,7 @@ If sign-in succeeds but connecting Drive fails, choose **Reset connection** in S
 - Saves are immutable ZIP snapshots with parent links. Simultaneous different uploads preserve both versions and ask which cloud copy to use; local-vs-cloud conflicts ask before replacement. This avoids relying on clocks or silently overwriting a concurrent save.
 - After each successful save sync, EmuSync automatically keeps the latest Drive save plus two older backups for that game. It verifies the latest cloud ZIP before permanently deleting older EmuSync save archives, oldest ancestors first. Unresolved conflicts, changed cloud heads, invalid history, or failed verification defer cleanup. Matching concurrent copies can be joined before pruning. Uploaded ISOs, other games, local backups, and recovery records are untouched. A cleanup failure does not undo a successful sync; it is reported in Settings → Library details and retried after the next successful sync. Legacy histories above 1,000 revisions still stop for attention rather than deleting from an incomplete listing.
 - Saves allow up to 1 GB per game and 10,000 files; transfer archives allow 16 MB of extra ZIP overhead. Both devices need 1.3.1 or later for saves above the old 128 MB limit. ISOs remain limited to 8 GB. Expanded ZIPs, paths, game IDs, hashes, response sizes, and upload URLs are checked before use.
+- Saves are now staged and verified as streamed ZIP files instead of whole-save arrays. Drive save uploads reuse the bounded resumable upload buffer, and downloads verify entries from a temporary archive. Current Drive saves and backups remain compatible. Allow several GB of free local space for near-limit saves and their backups.
 - Uploads use 4 MB resumable chunks. Interrupted uploads currently restart when retried; upload sessions are not persisted across app launches.
 - If two different ISOs have the same PSP game ID, the app pauses cloud game access instead of choosing silently. Keep the intended copy in the Drive folder and remove the duplicate, then Refresh games. Existing local games/saves are retained.
 - Disconnecting revokes Google access and may require reconnecting on other devices. Files remain on Drive. Account and Wi-Fi save baselines are kept separate.

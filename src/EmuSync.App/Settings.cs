@@ -16,6 +16,7 @@ public sealed class Settings
     public string? DriveAccountId { get; set; }
     public string? DriveEmail { get; set; }
     public Dictionary<string,Baseline> Baselines { get; set; }=[];
+    public Dictionary<string,SaveSyncStatus> SaveStatus { get; set; }=[];
     public Dictionary<string,bool> SyncGames { get; set; }=[];
     public List<Game> CachedGames { get; set; }=[];
     public List<Game> CachedDriveGames { get; set; }=[];

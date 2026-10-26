@@ -34,23 +34,25 @@ public sealed class WifiClient : ISyncPeer
         Ensure(response);
         return await response.Content.ReadFromJsonAsync<SaveDescriptor>(timeout.Token) ?? throw new IOException("The PC returned invalid save information.");
     }
-    public async Task<SaveBundle> DownloadSave(string id,string hash)
+    public async Task<SaveBundle> DownloadSave(string id,string hash,Action<string>? progress=null)
     {
         using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(15));
         using var request=new HttpRequestMessage(HttpMethod.Get,$"api/saves/{SafePath.GameId(id)}");
         request.Headers.Add("X-Expected-Hash",hash);
         using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,timeout.Token);
         Ensure(response);
-        var bundle=SaveBundle.FromZip(await Bytes(response,SaveBundle.ArchiveLimit,timeout.Token),id);
-        if (bundle.Info.Hash!=hash) throw new IOException("The save failed verification. Nothing was replaced.");
+        await using var input=await response.Content.ReadAsStreamAsync(timeout.Token);
+        var bundle=await SaveBundle.FromZip(input,id,progress,response.Content.Headers.ContentLength,timeout.Token);
+        if(bundle.Info.Hash!=hash) { bundle.Dispose(); throw new IOException("The save failed verification. Nothing was replaced."); }
         return bundle;
     }
-    public async Task UploadSave(string id,SaveBundle bundle,string? expected)
+    public async Task UploadSave(string id,SaveBundle bundle,string? expected,Action<string>? progress=null)
     {
         using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(15));
         using var request=new HttpRequestMessage(HttpMethod.Put,$"api/saves/{SafePath.GameId(id)}");
         request.Headers.Add("X-Expected-Hash",expected??"none");
-        request.Content=new ByteArrayContent(bundle.Zip());
+        if(bundle.Id!=id) throw new InvalidDataException("The save belongs to another game.");
+        request.Content=new SaveUploadContent(bundle,progress);
         using var response=await client.SendAsync(request,timeout.Token);
         Ensure(response);
     }
@@ -81,4 +83,15 @@ public sealed class WifiClient : ISyncPeer
         });
     }
     public void Dispose()=>client.Dispose();
+}
+
+sealed class SaveUploadContent(SaveBundle bundle,Action<string>? progress) : HttpContent
+{
+    protected override bool TryComputeLength(out long length) { using var input=bundle.OpenZip(); length=input.Length; return true; }
+    protected override Task SerializeToStreamAsync(Stream output,TransportContext? context)=>SerializeToStreamAsync(output,context,CancellationToken.None);
+    protected override async Task SerializeToStreamAsync(Stream output,TransportContext? context,CancellationToken token)
+    {
+        using var input=bundle.OpenZip();
+        await SaveBundle.CopyLimited(input,output,SaveBundle.ArchiveLimit,token,SaveBundle.Progress(progress,"Uploading save",input.Length));
+    }
 }

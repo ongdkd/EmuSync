@@ -6,7 +6,7 @@ This is an independent implementation inspired by [emu-sync/EmuSync](https://git
 
 ## Try the builds
 
-[Download the Windows installer and Android APK](https://github.com/ongdkd/EmuSync/releases/tag/v1.4.1-preview.1). The library now uses a launcher-style layout: shelves with a featured card, box-art covers, a full-width game banner with a Play bar, and a simple two-column phone grid with Play pinned at the bottom. Google account switching and EmuDeck save-folder fixes are retained. Install over the original-key Android app without uninstalling or clearing data. The APK from `v1.0-preview.1` used a different key and cannot be updated in place with the original key; preserve its private data before considering removal. Live Google sync and physical Android testing remain pending. No games, saves, or PPSSPP binaries are included.
+[Download the Windows installer and Android APK](https://github.com/ongdkd/EmuSync/releases/tag/v1.5.0-preview.1). The library now uses a launcher-style layout: shelves with a featured card, box-art covers, a full-width game banner with a Play bar, and a simple two-column phone grid with Play pinned at the bottom. Google account switching and EmuDeck save-folder fixes are retained. Install over the original-key Android app without uninstalling or clearing data. The APK from `v1.0-preview.1` used a different key and cannot be updated in place with the original key; preserve its private data before considering removal. Live Google sync and physical Android testing remain pending. No games, saves, or PPSSPP binaries are included.
 
 - **Windows:** run the downloaded setup executable. It installs or updates for your Windows account, adds a Start menu shortcut, and includes an uninstaller. The installer is unsigned, so Windows may display a warning. The portable build at `dist/Windows/EmuSync.App.exe` also works; keep that entire folder together.
 - **Android:** install `dist/EmuSync-Android.apk` on a 64-bit ARM device running Android 8 or newer. This is a development-signed sideload build, not a Play Store release.
@@ -44,6 +44,7 @@ On phones the header stays visible while scrolling. Back closes Settings, return
 
 ## Playing and syncing
 
+- Each game shows its save state, byte progress where available, and the last successful sync time. **Ready to play** is a completed pre-launch check; **Playing** still needs a post-game sync. **Safe to switch devices** appears after a finished session syncs successfully. Offline/failed/cancelled sessions show **Sync needed**, and interrupted app sessions keep their previous sync time without claiming success. An empty save folder shows **No save yet**.
 - Opening the app or selecting a game does **not** sync saves.
 - Pressing **Play** on Android downloads the game if needed, verifies it, and checks saves against the PC and the last successful sync.
 - Changes made on only one device transfer automatically. Different progress on both devices asks which copy to keep. Missing or suspiciously empty save files pause the operation.
@@ -69,6 +70,7 @@ If the PC's address changes, copy a fresh pairing code. To revoke existing pairi
 - Uncompressed `.iso` games and regular `SAVEDATA` only. CSO/CHD and save states are not implemented. Google Drive requires the preview setup above; other cloud providers are not implemented.
 - Game discovery scans up to four subfolders deep and 1,000 game IDs; duplicate IDs use the first copy found.
 - Saves are limited to 1 GB per game and 10,000 files. Transfer archives allow an extra 16 MB for ZIP overhead. Update both devices to 1.3.1 or later for saves larger than 128 MB. Windows supports the selected PSP folder's top-level SAVEDATA link; nested links and paths that cannot transfer safely are rejected.
+- Save contents and ZIP transfers are streamed through temporary files, with bounded buffers and hashing/compression off the UI thread. Backups and recovery use streamed ZIPs too; the existing ZIP/hash format is retained. Temporary archives are disposed after each operation, and abandoned staging files are cleaned on a later app start. Keep several GB free for staging and durable local backups when syncing saves near 1 GB; low RAM use does not remove the need for disk space.
 - Android must use local folder storage that supports seeking. Some cloud document providers cannot expose ISO files this way.
 - Windows x64 and Android ARM64 packages are supplied. There is no auto-updater yet.
 

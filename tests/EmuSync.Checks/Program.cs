@@ -16,6 +16,13 @@ Check(SyncPlan.Decide(null,"A","A",false)==SyncAction.Suspicious,"Missing save")
 Check(SyncPlan.Decide("A",null,"A",false)==SyncAction.Suspicious,"Missing PC save");
 Check(SyncPlan.Decide(null,"A",null,false)==SyncAction.Download,"New device");
 Check(SyncPlan.Decide("A","A","A",true)==SyncAction.Suspicious,"Empty files");
+var syncStatus=new SaveSyncStatus();
+Check(!syncStatus.SafeToSwitch && !syncStatus.Change("syncing","Reading",45).SafeToSwitch,"In-progress saves never claim safe to switch");
+var checkedStatus=syncStatus.Change("checked","Ready");
+Check(checkedStatus.LastSynced is not null && !checkedStatus.SafeToSwitch,"Pre-launch check records time without claiming the game is finished");
+var playingStatus=checkedStatus.Change("playing","Playing");
+Check(!playingStatus.SafeToSwitch && playingStatus.AfterRestart().State=="pending" && playingStatus.AfterRestart().LastSynced==checkedStatus.LastSynced,"Restarted sessions need sync and preserve the previous sync time");
+Check(syncStatus.Change("synced","Done").SafeToSwitch && !playingStatus.Change("error","Offline").SafeToSwitch,"Only completed sessions claim safe switching");
 Reject(()=>SafePath.Validate("../outside")); Reject(()=>SafePath.Validate("SAVEDATA/x/C:bad"));
 Reject(()=>SafePath.GameId("../bad")); Reject(()=>IsoReader.ReadSfo(new byte[21]));
 var pair=new Pairing("192.168.1.5",42387,new string('A',64),new string('B',64));
@@ -30,29 +37,29 @@ try
     var folder=new LocalFolder(Path.Combine(root,"PSP"));
     await folder.Write("SAVEDATA/ULUS12345/DATA.BIN",new MemoryStream([1,2,3]));
     await folder.Write("SAVEDATA/ULUS99999/DATA.BIN",new MemoryStream([9]));
-    var before=await SaveBundle.Capture(folder,"ULUS12345");
+    var before=await SaveFixtures.Capture(folder,"ULUS12345");
     Check(before.Info.Files==1,"Only this game's saves");
-    var after=SaveBundle.FromZip(before.Zip(),"ULUS12345");
-    after.Files["SAVEDATA/ULUS12345/DATA.BIN"]=[4,5,6];
+    Check(before.Info.Hash=="EA3989E11F49D675873D38027630948ACC6CDCE0207F5573F1EA63CE2C590EA5","Streaming snapshots retain the legacy save hash format");
+    var after=SaveFixtures.With(before,("SAVEDATA/ULUS12345/DATA.BIN",[4,5,6]));
     await SaveBundle.Apply(folder,"ULUS12345",after,Path.Combine(root,"backups"));
-    Check((await SaveBundle.Capture(folder,"ULUS12345")).Info.Hash==after.Info.Hash,"Verified replacement");
+    Check((await SaveFixtures.Capture(folder,"ULUS12345")).Info.Hash==after.Info.Hash,"Verified replacement");
     Check(Directory.GetFiles(Path.Combine(root,"backups")).Length==1,"Backup exists");
-    Check((await SaveBundle.Capture(folder,"ULUS99999")).Files.Values.Single()[0]==9,"Other game's save untouched");
+    Check(SaveFixtures.Read(await SaveFixtures.Capture(folder,"ULUS99999"),"SAVEDATA/ULUS99999/DATA.BIN")[0]==9,"Other game's save untouched");
     await SaveBundle.Apply(folder,"ULUS12345",before,Path.Combine(root,"backups"));
-    Check((await SaveBundle.Capture(folder,"ULUS12345")).Info.Hash==before.Info.Hash,"Restore works");
+    Check((await SaveFixtures.Capture(folder,"ULUS12345")).Info.Hash==before.Info.Hash,"Restore works");
     var recoveryDir=Path.Combine(root,"recovery"); Directory.CreateDirectory(recoveryDir);
-    await File.WriteAllBytesAsync(Path.Combine(recoveryDir,"ULUS12345-original.zip"),before.Zip());
+    await File.WriteAllBytesAsync(Path.Combine(recoveryDir,"ULUS12345-original.zip"),SaveFixtures.Zip(before));
     await File.WriteAllTextAsync(Path.Combine(recoveryDir,"pending-save.json"),"{\"Id\":\"ULUS12345\",\"Backup\":\"ULUS12345-original.zip\"}");
     await folder.Write("SAVEDATA/ULUS12345/DATA.BIN",new MemoryStream([7,8]));
     await folder.Write("SAVEDATA/ULUS12345/PARTIAL.BIN",new MemoryStream([1]));
     Check(SaveBundle.RecoveryNeeded(recoveryDir),"Interrupted transaction detected");
     await SaveBundle.Recover(folder,recoveryDir);
-    Check(!SaveBundle.RecoveryNeeded(recoveryDir) && (await SaveBundle.Capture(folder,"ULUS12345")).Info.Hash==before.Info.Hash,"Interrupted sync restored original save");
+    Check(!SaveBundle.RecoveryNeeded(recoveryDir) && (await SaveFixtures.Capture(folder,"ULUS12345")).Info.Hash==before.Info.Hash,"Interrupted sync restored original save");
     var broken=new FailingFolder(folder);
-    var extra=SaveBundle.FromZip(after.Zip(),"ULUS12345"); extra.Files["SAVEDATA/ULUS12345/NEW.BIN"]=[1];
+    var extra=SaveFixtures.With(after,("SAVEDATA/ULUS12345/NEW.BIN",[1]));
     try { await SaveBundle.Apply(broken,"ULUS12345",extra,Path.Combine(root,"rollback")); throw new Exception("Failed write accepted"); }
     catch(IOException) { checks++; }
-    Check((await SaveBundle.Capture(folder,"ULUS12345")).Info.Hash==before.Info.Hash,"Write failure rolled back all files");
+    Check((await SaveFixtures.Capture(folder,"ULUS12345")).Info.Hash==before.Info.Hash,"Write failure rolled back all files");
     var beforeHash=before.Info.Hash;
     await using(var host=new WifiHost())
     {
@@ -65,10 +72,10 @@ try
         Check((await client.Describe("ULUS12345")).Info.Hash==beforeHash,"Remote save metadata");
         Check((await client.DownloadSave("ULUS12345",beforeHash!)).Info.Hash==beforeHash,"Verified save transfer");
         await client.UploadSave("ULUS12345",after,beforeHash);
-        Check((await SaveBundle.Capture(folder,"ULUS12345")).Info.Hash==after.Info.Hash,"TLS upload applied");
+        Check((await SaveFixtures.Capture(folder,"ULUS12345")).Info.Hash==after.Info.Hash,"TLS upload applied");
         try { await client.UploadSave("ULUS12345",before,beforeHash); throw new Exception("Stale update accepted"); }
         catch(IOException) { checks++; }
-        Check((await SaveBundle.Capture(folder,"ULUS12345")).Info.Hash==after.Info.Hash,"Stale upload did not overwrite progress");
+        Check((await SaveFixtures.Capture(folder,"ULUS12345")).Info.Hash==after.Info.Hash,"Stale upload did not overwrite progress");
         busy=true;
         try { await client.Describe("ULUS12345"); throw new Exception("Running emulator not protected"); } catch(IOException) { checks++; }
         busy=false;
@@ -79,10 +86,10 @@ try
         var download=await client.DownloadGame(new Game("ULUS12345","Test","test.iso",4,null,null),Path.Combine(root,"cache"),_=>{});
         Check((await File.ReadAllBytesAsync(download.Path)).SequenceEqual(new byte[]{1,2,3,4}),"Verified game transfer");
     }
-    Reject(()=>SaveBundle.FromZip(before.Zip(),"ULUS99999"));
+    Reject(()=>SaveFixtures.Decode(SaveFixtures.Zip(before),"ULUS99999").GetAwaiter().GetResult());
     using var bad=new MemoryStream();
     using(var zip=new ZipArchive(bad,ZipArchiveMode.Create,true)) { using var entry=zip.CreateEntry("../outside").Open(); entry.WriteByte(1); }
-    Reject(()=>SaveBundle.FromZip(bad.ToArray(),"ULUS12345"));
+    Reject(()=>SaveFixtures.Decode(bad.ToArray(),"ULUS12345").GetAwaiter().GetResult());
     // A synthetic ISO verifies actual directory traversal and SFO parsing, with no commercial game fixture.
     var iso=new byte[24*2048];
     void Both32(int at,uint value) { BinaryPrimitives.WriteUInt32LittleEndian(iso.AsSpan(at),value); BinaryPrimitives.WriteUInt32BigEndian(iso.AsSpan(at+4),value); }
@@ -121,6 +128,7 @@ try
 }
 finally
 {
+    SaveFixtures.DisposeAll();
     var resolved=Path.GetFullPath(root);
     var tempRoot=Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar);
     if(Path.GetDirectoryName(resolved)!=tempRoot || !Path.GetFileName(resolved).StartsWith("emusync-check-",StringComparison.Ordinal))
