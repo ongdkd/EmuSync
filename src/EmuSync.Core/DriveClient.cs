@@ -87,6 +87,37 @@ public sealed partial class DriveClient : ISyncPeer
             throw new IOException("Another device synced at the same time. Both Drive copies were kept. Press Play again to choose.");
         observed=after; selected=after[0];
     }
+    public async Task CleanupSave(string id,string? expected)
+    {
+        RequireObserved(id,expected);
+        if(expected is null) return;
+        var versions=await List(id);
+        var heads=Heads(versions);
+        if(versions.Count<=3 || !SameHeads(heads,observed!) || heads.Any(v=>v.Hash!=expected || v.Suspicious)) return;
+        if(heads.Count>1)
+        {
+            await UploadSave(id,await DownloadSave(id,expected),expected);
+            versions=await List(id); heads=Heads(versions);
+            if(heads.Count!=1 || !SameHeads(heads,observed!)) return;
+        }
+        // Oldest ancestors go first: interruption must not turn an older backup into a conflict head.
+        var remaining=versions.ToDictionary(v=>v.Id,StringComparer.Ordinal);
+        var ordered=new List<DriveVersion>();
+        while(remaining.Count>0)
+        {
+            var next=remaining.Values.Where(v=>v.Parents.All(p=>!remaining.ContainsKey(p)))
+                .OrderBy(v=>v.Created).ThenBy(v=>v.Id,StringComparer.Ordinal).FirstOrDefault();
+            if(next is null) throw new IOException("Drive history is inconsistent. Backup cleanup was skipped.");
+            ordered.Add(next); remaining.Remove(next.Id);
+        }
+        await DownloadSave(id,expected);
+        if(!SameHeads(Heads(await List(id)),heads)) return;
+        foreach(var old in ordered.Take(ordered.Count-3))
+        {
+            using var response=await client.DeleteAsync($"drive/v3/files/{old.Id}");
+            if(response.StatusCode!=HttpStatusCode.NotFound) Ensure(response);
+        }
+    }
     void RequireObserved(string id,string? expected)
     {
         SafePath.GameId(id);
@@ -125,7 +156,7 @@ public sealed partial class DriveClient : ISyncPeer
             var files=page.Files??[];
             if(files.Length>100 || files.Any(f=>!ValidId(f.Id))) throw new IOException("Invalid Drive listing.");
             result.AddRange(files);
-            // shortcut: keep remote backups; add explicit archive management after 1,000 revisions per game.
+            // shortcut: bound remote listings to 1,000 entries; add paged history management for larger legacy libraries.
             if(result.Count>1000 || result.Select(f=>f.Id).Distinct().Count()!=result.Count) throw new IOException("Drive history needs attention. No files were deleted.");
             next=page.NextPageToken;
             if(next?.Length>4096) throw new IOException("Invalid Drive page token.");

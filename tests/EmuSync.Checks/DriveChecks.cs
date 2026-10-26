@@ -78,13 +78,83 @@ static class DriveChecks
         server.CorruptDownload=false;
         server.Fail=true;
         await Reject(()=>a.Describe("ULUS12345"),"Expired cloud authorization accepted");
+        checks+=await CleanupChecks(iso);
+        return checks;
+    }
+
+    static async Task<int> CleanupChecks(byte[] iso)
+    {
+        var checks=0;
+        void Check(bool condition,string name) { if(!condition) throw new Exception(name); checks++; }
+        async Task Reject(Func<Task> action,string name) { try { await action(); } catch(IOException) { checks++; return; } throw new Exception(name); }
+        var server=new DriveServer();
+        using var drive=new DriveClient(new HttpClient(server,false),"Cleanup test",versions=>Task.FromResult<string?>(versions[0].Id));
+        var copies=new List<string>();
+        SaveBundle Save(byte value,string id="ULUS12345") { var save=new SaveBundle(); save.Files[$"SAVEDATA/{id}/DATA.BIN"]=[value]; return save; }
+        var latest=Save(6);
+        for(byte i=1;i<=6;i++)
+        {
+            var before=await drive.Describe("ULUS12345");
+            await drive.UploadSave("ULUS12345",Save(i),before.Info.Hash);
+            copies.Add(server.Items.Last().Id);
+        }
+        await drive.Describe("ULUS99999"); await drive.UploadSave("ULUS99999",Save(9,"ULUS99999"),null);
+        var other=server.Items.Last().Id;
+        var game=await IsoReader.Read(new MemoryStream(iso),"test.iso");
+        await drive.UploadGame(game,new MemoryStream(iso),_=>{});
+        var gameFile=server.Items.Last().Id;
+        await drive.Describe("ULUS12345");
+        server.CorruptDownload=true;
+        await Reject(()=>drive.CleanupSave("ULUS12345",latest.Info.Hash),"Cleanup accepted an unverified cloud save");
+        Check(server.Deleted.Count==0,"A corrupt latest save prevents all cleanup");
+        server.CorruptDownload=false; server.FailDeleteAfter=1;
+        await Reject(()=>drive.CleanupSave("ULUS12345",latest.Info.Hash),"Cleanup deletion failure was ignored");
+        Check(server.Deleted.SequenceEqual(copies.Take(1)),"Cleanup deletes the oldest ancestor first");
+        Check((await drive.Describe("ULUS12345")).Info.Hash==latest.Info.Hash && !drive.HasBranches,"Interrupted cleanup does not resurrect older conflict heads");
+        server.FailDeleteAfter=null;
+        await drive.CleanupSave("ULUS12345",latest.Info.Hash);
+        Check(server.Items.Where(i=>copies.Contains(i.Id)).Select(i=>i.Id).ToHashSet().SetEquals(copies.TakeLast(3)),"Cleanup keeps the latest save and exactly two older backups");
+        Check(server.Items.Any(i=>i.Id==other) && server.Items.Any(i=>i.Id==gameFile),"Cleanup preserves other games and uploaded ISOs");
+        Check((await drive.DownloadSave("ULUS12345",latest.Info.Hash!)).Info.Hash==latest.Info.Hash,"Retained latest save remains downloadable and verified");
+        var deleted=server.Deleted.Count;
+        await drive.CleanupSave("ULUS12345",latest.Info.Hash);
+        Check(server.Deleted.Count==deleted,"Repeated sync cleanup is a no-op with three copies");
+        server.Race=Save(7);
+        await Reject(()=>drive.UploadSave("ULUS12345",Save(8),latest.Info.Hash),"Conflicting race accepted");
+        await drive.CleanupSave("ULUS12345",latest.Info.Hash);
+        Check(server.Deleted.Count==deleted,"Unresolved conflicting branches prevent cleanup");
+        var chosen=await drive.Describe("ULUS12345");
+        var resolved=await drive.DownloadSave("ULUS12345",chosen.Info.Hash!);
+        await drive.UploadSave("ULUS12345",resolved,chosen.Info.Hash);
+        await drive.CleanupSave("ULUS12345",resolved.Info.Hash);
+        Check(server.Items.Count-2==3 && (await drive.Describe("ULUS12345")).Info.Hash==resolved.Info.Hash && !drive.HasBranches,"Resolved branches prune to three without creating a false conflict");
+        await drive.UploadSave("ULUS12345",Save(10),resolved.Info.Hash);
+        deleted=server.Deleted.Count;
+        server.RaceOnDownload=Save(11);
+        await drive.CleanupSave("ULUS12345",Save(10).Info.Hash);
+        Check(server.Deleted.Count==deleted,"A new cloud head during verification cancels cleanup");
+        await drive.Describe("ULUS12345");
+        server.Race=Save(12);
+        await drive.UploadSave("ULUS12345",Save(12),Save(11).Info.Hash);
+        await drive.CleanupSave("ULUS12345",Save(12).Info.Hash);
+        Check(server.Items.Count-2==3 && (await drive.Describe("ULUS12345")).Info.Hash==Save(12).Info.Hash,"Matching concurrent snapshots join safely before pruning to three");
+        foreach(var (id,parent) in new[]{("drive-cycle-0001","drive-cycle-0002"),("drive-cycle-0002","drive-cycle-0001")})
+        {
+            var metadata=new {appProperties=new {emusync="save-v1",game="ULUS12345",hash=Save(12).Info.Hash},description=JsonSerializer.Serialize(new {parents=new[]{parent},device="Invalid history",files=1,bytes=1,suspicious=false})};
+            server.Items.Add((id,JsonSerializer.SerializeToElement(metadata),Save(12).Zip()));
+        }
+        deleted=server.Deleted.Count;
+        await Reject(()=>drive.CleanupSave("ULUS12345",Save(12).Info.Hash),"Cyclic history accepted for deletion");
+        Check(server.Deleted.Count==deleted,"Invalid ancestry is detected before any deletion");
         return checks;
     }
 
     sealed class DriveServer : HttpMessageHandler
     {
         public List<(string Id,JsonElement Metadata,byte[] Zip)> Items { get; }=[];
-        public SaveBundle? Race;
+        public SaveBundle? Race,RaceOnDownload;
+        public List<string> Deleted { get; }=[];
+        public int? FailDeleteAfter;
         public bool CorruptDownload,Fail,BadLocation,ForeignRequest,HideNewListing;
         bool hideNext;
         public int Chunks;
@@ -96,6 +166,15 @@ static class DriveChecks
             if(Fail) return new(HttpStatusCode.Unauthorized);
             if(request.RequestUri!.Host!="www.googleapis.com") { ForeignRequest=true; throw new IOException("Foreign request"); }
             var path=request.RequestUri!.AbsolutePath;
+            if(request.Method==HttpMethod.Delete)
+            {
+                if(FailDeleteAfter is int limit && Deleted.Count>=limit) return new(HttpStatusCode.Forbidden);
+                var index=Items.FindIndex(i=>path.EndsWith('/'+i.Id));
+                if(index<0) return new(HttpStatusCode.NotFound);
+                if(Items[index].Metadata.GetProperty("appProperties").GetProperty("emusync").GetString()!="save-v1") throw new Exception("Cleanup tried to delete a game ISO");
+                Deleted.Add(Items[index].Id); Items.RemoveAt(index);
+                return new(HttpStatusCode.NoContent);
+            }
             if(path.EndsWith("/about")) return Reply(new {user=new {permissionId="test-account",emailAddress="test@example.invalid"}});
             if(request.Method==HttpMethod.Post)
             {
@@ -137,9 +216,16 @@ static class DriveChecks
                 if(query.Contains("folder-v1")) return Reply(new {files=new[]{new {id="drive-folder-0001",appProperties=new {emusync="folder-v1"}}}});
                 var kind=query.Contains("game-v1")?"game-v1":"save-v1";
                 var listed=hideNext?Items.Take(Items.Count-1).ToArray():Items.ToArray(); hideNext=false;
-                return Reply(new {files=listed.Where(i=>i.Metadata.GetProperty("appProperties").GetProperty("emusync").GetString()==kind).Select(i=>new {id=i.Id,size=i.Zip.LongLength,description=i.Metadata.GetProperty("description").GetString(),appProperties=i.Metadata.GetProperty("appProperties"),createdTime=DateTimeOffset.UtcNow})});
+                var wanted=System.Text.RegularExpressions.Regex.Match(query,"key='game' and value='([^']+)'");
+                return Reply(new {files=listed.Where(i=>i.Metadata.GetProperty("appProperties").GetProperty("emusync").GetString()==kind && (!wanted.Success || i.Metadata.GetProperty("appProperties").GetProperty("game").GetString()==wanted.Groups[1].Value)).Select(i=>new {id=i.Id,size=i.Zip.LongLength,description=i.Metadata.GetProperty("description").GetString(),appProperties=i.Metadata.GetProperty("appProperties"),createdTime=DateTimeOffset.UnixEpoch.AddSeconds(int.Parse(i.Id.Split('-')[^1]))})});
             }
             var item=Items.Single(i=>path.EndsWith('/'+i.Id));
+            if(RaceOnDownload is { } racingDownload)
+            {
+                RaceOnDownload=null;
+                var metadata=new {appProperties=new {emusync="save-v1",game="ULUS12345",hash=racingDownload.Info.Hash},description=JsonSerializer.Serialize(new {parents=new[]{item.Id},device="Other device",files=racingDownload.Info.Files,bytes=racingDownload.Info.Bytes,suspicious=false})};
+                Items.Add((Id(),JsonSerializer.SerializeToElement(metadata),racingDownload.Zip()));
+            }
             return new(HttpStatusCode.OK) {Content=new ByteArrayContent(CorruptDownload?new SaveBundle().Zip():item.Zip)};
         }
         string Id()=>"drive-file-"+(++next).ToString("D6");

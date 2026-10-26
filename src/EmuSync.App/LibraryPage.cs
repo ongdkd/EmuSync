@@ -441,6 +441,12 @@ public sealed class LibraryPage : ContentPage
         if(branches && action!=SyncAction.Upload) await peer.UploadSave(id,localSave,remote.Info.Hash);
         settings.Baselines[baselineKey]=new(localSave.Info.Hash,localSave.Files.Keys.ToArray());
         await settings.Save();
+        if(peer is DriveClient drive)
+        {
+            try { await drive.CleanupSave(id,localSave.Info.Hash); }
+            catch(Exception error) when(error is IOException or InvalidDataException or JsonException or HttpRequestException or TaskCanceledException)
+            { warnings.Add("Save synced, but old Drive backups could not be cleaned up. Cleanup will retry after the next successful sync. "+error.Message); }
+        }
         return true;
     }
     static async Task Backup(string id,SaveBundle bundle)
